@@ -1,0 +1,84 @@
+Smart Attendance System
+Comprehensive Technical Documentation
+1. Project Overview
+The Smart Attendance System is an Android-based application designed to automate and secure student attendance using QR codes, GPS geofencing, and biometric face verification. The system prevents proxy attendance and provides real-time monitoring for administrators.
+2. Problem Statement
+Traditional attendance systems are vulnerable to proxy marking, manual errors, and lack real-time monitoring. Institutions require a secure automated system that validates presence through multiple verification layers.
+3. Proposed Solution
+The system integrates three verification layers:
+1. Dynamic QR Codes (daily refresh)
+2. GPS Geofencing
+3. Face Verification
+These combined mechanisms ensure only legitimate students are marked present and remain within campus boundaries.
+4. System Architecture
+Frontend: Android Application (Kotlin)
+Backend: FastAPI (Python)
+Database: PostgreSQL or Firebase Firestore
+Face Recognition: InsightFace or FaceNet
+QR Generation: Python QR libraries
+Notifications: Firebase Cloud Messaging
+Deployment: Docker + Cloud (AWS / GCP)
+5. Core Modules
+1. Authentication Module
+2. QR Code Generation Module
+3. Attendance Check-in Module
+4. Geofencing Monitoring Module
+5. Face Verification Module
+6. Admin Dashboard
+7. Notification Service
+8. Attendance Analytics Engine
+6. Technology Stack
+Mobile App: Kotlin + Android Studio
+Backend API: FastAPI (Python)
+Database: PostgreSQL
+Realtime Updates: Firebase
+Face Recognition: InsightFace (recommended over ML Kit)
+QR Scanner: OpenCV / ZXing
+Cloud Hosting: AWS / GCP
+7. Why Not Google ML Kit
+Google ML Kit works well for basic detection but struggles with:
+• slower processing on low-end devices
+• limited face recognition capability
+• accuracy issues in crowded environments
+Better Alternatives:
+• InsightFace (best accuracy)
+• FaceNet
+• Mediapipe
+8. Workflow Process
+Phase 0: Midnight QR generation for each student
+Phase 1: Student check-in (QR + Face verification)
+Phase 2: Geofence monitoring during the day
+Phase 3: Checkout verification
+Phase 4: Attendance calculation and report generation
+9. API Design using FastAPI
+POST /login
+POST /verify-face
+POST /scan-qr
+POST /request-exit
+POST /approve-exit
+GET /attendance-report
+GET /student-status
+10. Database Schema
+Students Table
+Attendance Table
+Exit Requests Table
+QR Tokens Table
+Admin Table
+Logs Table
+11. Security Considerations
+• Tokenized QR codes
+• Face embedding verification
+• GPS tampering detection
+• Secure API authentication (JWT)
+12. Testing Plan
+Unit Testing: API endpoints
+Integration Testing: Mobile + backend
+Field Testing: GPS accuracy
+Security Testing: QR spoof prevention
+13. Future Improvements
+• AI behavior analytics
+• Blockchain attendance logs
+• Multi-campus support
+• Offline attendance caching
+14. Conclusion
+The Smart Attendance System modernizes institutional attendance tracking by combining computer vision, geolocation, and secure backend APIs. The system provides accurate attendance analytics while preventing proxy attendance and unauthorized exits.
