@@ -1,91 +1,111 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import random
-import time
-import firebase_admin
-from firebase_admin import firestore
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.security import verify_password, create_access_token, decode_token, hash_password
+from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+security = HTTPBearer()
 
-# Using a generic dev email for sending OTPs.
-# Replace with actual App Password if running in production
-SENDER_EMAIL = "antigravity.demo@gmail.com"
-SENDER_PASS = "czzy uvqg xzqw tzjk" # App password
 
-class SendOtpRequest(BaseModel):
+# ─── Request / Response Schemas ────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
     email: str
+    password: str
 
-class VerifyOtpRequest(BaseModel):
+
+class RegisterRequest(BaseModel):
     email: str
-    otp: str
+    password: str
+    name: str
+    role: str = "STUDENT"  # STUDENT or ADMIN
+    roll_number: str = ""
 
-@router.post("/send-otp")
-def send_otp(req: SendOtpRequest):
-    # Generate 6 digit OTP
-    otp_code = str(random.randint(100000, 999999))
-    
-    # Store OTP in Firestore with expiration (5 mins)
-    db = firestore.client()
-    try:
-        db.collection("otp_tokens").document(req.email).set({
-            "otp": otp_code,
-            "expires_at": time.time() + 300
-        })
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Database Error")
-    
-    # Send Email
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = f"Smart Attendance <{SENDER_EMAIL}>"
-        msg['To'] = req.email
-        msg['Subject'] = "Your Login Verification Code"
-        
-        body = f"""
-        <html>
-            <body>
-                <h2>Smart Attendance System</h2>
-                <p>Hello,</p>
-                <p>Your one-time verification code is:</p>
-                <h1 style="color: #6C47FF;">{otp_code}</h1>
-                <p>This code will expire in 5 minutes.</p>
-                <p>If you did not request this code, please ignore this email.</p>
-            </body>
-        </html>
-        """
-        msg.attach(MIMEText(body, 'html'))
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASS)
-        server.send_message(msg)
-        server.quit()
-        
-        return {"message": "OTP sent successfully"}
-    except Exception as e:
-        print(f"SMTP Error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to send email OTP.")
 
-@router.post("/verify-otp")
-def verify_otp(req: VerifyOtpRequest):
-    db = firestore.client()
-    doc_ref = db.collection("otp_tokens").document(req.email)
-    doc = doc_ref.get()
-    
-    if not doc.exists:
-        raise HTTPException(status_code=400, detail="OTP not found or expired")
-    
-    data = doc.to_dict()
-    if time.time() > data.get("expires_at", 0):
-        doc_ref.delete()
-        raise HTTPException(status_code=400, detail="OTP expired")
-        
-    if str(data.get("otp")) != req.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-        
-    # Success, consume the OTP
-    doc_ref.delete()
-    return {"message": "OTP verified successfully"}
+class LoginResponse(BaseModel):
+    token: str
+    role: str
+    name: str
+    email: str
+    user_id: str
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    roll_number: str
+
+
+# ─── Helper: get current user from JWT ─────────────────────────────────────────
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    token = credentials.credentials
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = db.query(User).filter(User.id == payload.get("sub")).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+# ─── Endpoints ─────────────────────────────────────────────────────────────────
+
+@router.post("/login", response_model=LoginResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email.lower().strip()).first()
+    if not user or not verify_password(req.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    token = create_access_token({"sub": user.id, "role": user.role, "email": user.email})
+    return LoginResponse(
+        token=token,
+        role=user.role,
+        name=user.name,
+        email=user.email,
+        user_id=user.id
+    )
+
+
+@router.post("/register", status_code=201)
+def register(req: RegisterRequest, db: Session = Depends(get_db),
+             current_user: User = Depends(get_current_user)):
+    """Admin-only: create a new user account."""
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only admins can register users")
+    existing = db.query(User).filter(User.email == req.email.lower().strip()).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    new_user = User(
+        email=req.email.lower().strip(),
+        hashed_password=hash_password(req.password),
+        name=req.name,
+        role=req.role.upper(),
+        roll_number=req.roll_number
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message": f"User '{req.name}' created successfully", "user_id": new_user.id}
+
+
+@router.get("/me", response_model=UserProfile)
+def get_me(current_user: User = Depends(get_current_user)):
+    return UserProfile(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role,
+        roll_number=current_user.roll_number or ""
+    )

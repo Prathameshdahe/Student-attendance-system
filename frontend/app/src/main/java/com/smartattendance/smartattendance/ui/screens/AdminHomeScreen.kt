@@ -1,8 +1,7 @@
 package com.smartattendance.smartattendance.ui.screens
 
-import android.Manifest
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,236 +9,195 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.smartattendance.smartattendance.ui.theme.BVPMaroon
-import com.smartattendance.smartattendance.ui.theme.BVPNavy
-import com.smartattendance.smartattendance.ui.theme.SuccessGreen
-import com.smartattendance.smartattendance.ui.theme.ErrorRed
-import kotlinx.coroutines.tasks.await
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import com.smartattendance.smartattendance.data.local.SessionManager
+import com.smartattendance.smartattendance.data.repository.AttendanceRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
 data class ActivityLogItem(
     val studentName: String,
     val rollNumber: String,
-    val action: String, // "CHECK_IN" or "CHECK_OUT" or "UNAUTHORIZED_EXIT"
+    val action: String,
     val time: String,
-    val status: String  // "SUCCESS" or "WARNING" or "ALERT"
+    val status: String
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminHomeScreen(
     onLogout: () -> Unit,
     onScanQr: () -> Unit
 ) {
-    val firestore = FirebaseFirestore.getInstance()
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val todayDisplay = SimpleDateFormat("EEEE, dd MMM", Locale.getDefault()).format(Date())
 
-    var adminName by remember { mutableStateOf("Admin") }
-    var presentCount by remember { mutableStateOf(0) }
-    var totalStudents by remember { mutableStateOf(0) }
+    var adminName by remember { mutableStateOf("...") }
     var activityLog by remember { mutableStateOf<List<ActivityLogItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        try {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-            val adminDoc = firestore.collection("users").document(uid).get().await()
-            adminName = adminDoc.getString("name") ?: "Admin"
+        adminName = withContext(Dispatchers.IO) {
+            SessionManager(context).getUserName() ?: "Admin"
+        }
+    }
 
-            // Total student count
-            val allStudents = firestore.collection("users")
-                .whereEqualTo("role", "STUDENT").get().await()
-            totalStudents = allStudents.size()
+    val barcodeLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) {
+            scope.launch {
+                try {
+                    val parts = result.contents.split("::")
+                    if (parts.size != 2) {
+                        Toast.makeText(context, "Invalid QR Format", Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    
+                    val repo = AttendanceRepository(context)
+                    val scanRes = repo.scanQr(result.contents)
+                    
+                    scanRes.onSuccess { data ->
+                        when (data.status) {
+                            "DUPLICATE" -> {
+                                Toast.makeText(context, "⚠️ Student has already checked out today", Toast.LENGTH_LONG).show()
+                            }
+                            "INVALID" -> {
+                                Toast.makeText(context, "❌ ${data.message}", Toast.LENGTH_LONG).show()
+                            }
+                            else -> {
+                                val newAction = if (data.status == "CHECK_IN") "Check In" else "Check Out"
+                                val newEntry = ActivityLogItem(
+                                    studentName = data.student_name ?: "Unknown Student",
+                                    rollNumber = data.roll ?: "—",
+                                    action = newAction,
+                                    time = data.time ?: SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
+                                    status = "SUCCESS"
+                                )
+                                activityLog = listOf(newEntry) + activityLog
+                                Toast.makeText(context, "✅ ${data.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }.onFailure { err ->
+                        Toast.makeText(context, "Server Error: ${err.message}", Toast.LENGTH_LONG).show()
+                    }
 
-            // Today's attendance logs
-            val logs = firestore.collection("attendance_logs")
-                .whereEqualTo("date", today)
-                .get().await()
-
-            presentCount = logs.documents.count { it.getString("status") == "PRESENT" }
-
-            // Build activity log from logs
-            val items = mutableListOf<ActivityLogItem>()
-            for (doc in logs.documents) {
-                val studentId = doc.getString("student_id") ?: continue
-                val studentDoc = firestore.collection("users").document(studentId).get().await()
-                val name = studentDoc.getString("name") ?: "Unknown"
-                val roll = studentDoc.getString("roll_number") ?: ""
-
-                val checkIn = doc.getLong("check_in")
-                val checkOut = doc.getLong("check_out")
-
-                if (checkIn != null) {
-                    items.add(
-                        ActivityLogItem(
-                            studentName = name,
-                            rollNumber = roll,
-                            action = "Check In",
-                            time = formatTimestamp(checkIn),
-                            status = "SUCCESS"
-                        )
-                    )
-                }
-                if (checkOut != null) {
-                    items.add(
-                        ActivityLogItem(
-                            studentName = name,
-                            rollNumber = roll,
-                            action = "Check Out",
-                            time = formatTimestamp(checkOut),
-                            status = "SUCCESS"
-                        )
-                    )
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Scan error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-
-            activityLog = items.sortedByDescending { it.time }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            isLoading = false
         }
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            adminName,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            "Faculty  •  $todayDisplay",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onScanQr,
-                icon = {
-                    Icon(
-                        Icons.Filled.QrCodeScanner,
-                        contentDescription = "Scan QR",
-                        tint = Color.White
+                onClick = {
+                    barcodeLauncher.launch(
+                        ScanOptions().apply {
+                            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            setPrompt("Scan student's Daily QR Code")
+                            setCameraId(0)
+                            setBeepEnabled(true)
+                            setBarcodeImageEnabled(false)
+                        }
                     )
                 },
-                text = { Text("Scan QR", color = Color.White) },
-                containerColor = BVPMaroon,
-                shape = RoundedCornerShape(12.dp)
+                icon = { Icon(Icons.Filled.QrCodeScanner, contentDescription = null) },
+                text = { Text("Scan QR", style = MaterialTheme.typography.labelLarge) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF8F9FA))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
         ) {
-            // Header
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(BVPNavy)
-                    .padding(horizontal = 24.dp, vertical = 20.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "Good ${getGreeting()},",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    )
-                    Text(
-                        text = adminName,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    )
-                    Text(
-                        text = "Admin • ${SimpleDateFormat("EEEE, dd MMM", Locale.getDefault()).format(Date())}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        FirebaseAuth.getInstance().signOut()
-                        onLogout()
-                    },
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Logout",
-                        tint = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
+            Spacer(Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Summary Cards Row
+            // ── Summary chips row ─────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                SummaryCard(
-                    title = "Present",
-                    value = "$presentCount",
-                    color = SuccessGreen,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "Absent",
-                    value = "${totalStudents - presentCount}",
-                    color = ErrorRed,
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryCard(
-                    title = "Total",
-                    value = "$totalStudents",
-                    color = BVPNavy,
-                    modifier = Modifier.weight(1f)
-                )
+                KiwiStatCard("Present", "${activityLog.count { it.action == "Check In" }}", Modifier.weight(1f))
+                KiwiStatCard("Absent", "—", Modifier.weight(1f))
+                KiwiStatCard("Scanned", "${activityLog.size}", Modifier.weight(1f))
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(Modifier.height(20.dp))
 
-            // Activity Log Header
+            // ── Section header ────────────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Today's Activity",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = BVPNavy
+                    "Today's Activity",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Text(
+                        "${activityLog.size} events",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
-                )
-                Text(
-                    text = "${activityLog.size} events",
-                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
-                )
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
 
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BVPMaroon)
-                }
-            } else if (activityLog.isEmpty()) {
+            if (activityLog.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -247,17 +205,33 @@ fun AdminHomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Filled.PersonAdd,
-                            contentDescription = null,
-                            tint = BVPNavy.copy(alpha = 0.2f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Filled.QrCodeScanner,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
                         Text(
-                            text = "No activity yet today",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = Color.Gray
+                            "No scans yet",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Tap the Scan QR button to mark attendance",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                     }
@@ -267,10 +241,8 @@ fun AdminHomeScreen(
                     modifier = Modifier.padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(activityLog) { item ->
-                        ActivityCard(item)
-                    }
-                    item { Spacer(modifier = Modifier.height(80.dp)) } // space for FAB
+                    items(activityLog) { item -> KiwiActivityCard(item) }
+                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
@@ -278,99 +250,65 @@ fun AdminHomeScreen(
 }
 
 @Composable
-fun SummaryCard(
-    title: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    color = color,
-                    fontSize = 22.sp
-                )
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = Color.Gray,
-                    fontSize = 10.sp
-                )
-            )
-        }
+fun KiwiActivityCard(item: ActivityLogItem) {
+    val statusColor = when (item.status) {
+        "SUCCESS" -> MaterialTheme.colorScheme.tertiary
+        "WARNING" -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.error
     }
-}
-
-@Composable
-fun ActivityCard(item: ActivityLogItem) {
-    val accentColor = when (item.status) {
-        "SUCCESS" -> SuccessGreen
-        "WARNING" -> Color(0xFFFFA000)
-        else -> ErrorRed
+    val statusBg = when (item.status) {
+        "SUCCESS" -> MaterialTheme.colorScheme.tertiaryContainer
+        "WARNING" -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.errorContainer
     }
 
-    Card(
+    ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Color Dot
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(accentColor)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Name and action
+            // Status dot
+            Surface(shape = CircleShape, color = statusBg, modifier = Modifier.size(36.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.studentName,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        color = BVPNavy
-                    )
+                    item.studentName,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
                 Text(
-                    text = "${item.action}  •  Roll: ${item.rollNumber}",
-                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                    "${item.action}  •  Roll: ${item.rollNumber}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 )
             }
-
-            // Time
-            Text(
-                text = item.time,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = Color.Gray,
-                    fontSize = 11.sp
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                Text(
+                    item.time,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
+                    ),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
-            )
+            }
         }
     }
 }
 
-fun formatTimestamp(millis: Long): String {
-    return SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
-}
+fun formatTimestamp(millis: Long): String =
+    SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))

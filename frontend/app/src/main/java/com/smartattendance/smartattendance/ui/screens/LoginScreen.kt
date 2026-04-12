@@ -1,44 +1,54 @@
 package com.smartattendance.smartattendance.ui.screens
 
 import android.util.Patterns
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
 import com.smartattendance.smartattendance.R
-import com.smartattendance.smartattendance.ui.components.*
+import com.smartattendance.smartattendance.data.repository.AuthRepository
+import com.smartattendance.smartattendance.ui.components.AuthTextField
 import com.smartattendance.smartattendance.ui.theme.*
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     role: String,
     onBack: () -> Unit,
     onLoginSuccess: (role: String) -> Unit
 ) {
-    val auth = FirebaseAuth.getInstance()
+    val context = LocalContext.current
+    val authRepo = remember { AuthRepository(context) }
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
@@ -50,294 +60,250 @@ fun LoginScreen(
 
     val emailValid = email.isNotEmpty() && Patterns.EMAIL_ADDRESS.matcher(email).matches()
     val emailInvalid = email.isNotEmpty() && !emailValid
-    val roleColor = if (role == "ADMIN") AdminPrimary else StudentPrimary
 
-    Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    val isAdmin = role == "ADMIN"
+    val roleLabel = if (isAdmin) "Faculty / Admin" else "Student"
+    val roleBg = if (isAdmin) MaterialTheme.colorScheme.tertiaryContainer
+                 else MaterialTheme.colorScheme.secondaryContainer
+    val roleOn = if (isAdmin) MaterialTheme.colorScheme.onTertiaryContainer
+                 else MaterialTheme.colorScheme.onSecondaryContainer
+    val primaryColor = if (isAdmin) MaterialTheme.colorScheme.tertiary
+                       else MaterialTheme.colorScheme.secondary
 
-            // ── Wave Header with BVP logo ─────────────────────────────
-            WaveHeader(height = 200.dp, onBack = onBack) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // ── Header ───────────────────────────────────────────────────
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                // Centered Logo and Subtitle
                 Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(top = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // BVP College crest logo
                     Image(
                         painter = painterResource(id = R.drawable.logo_crest),
-                        contentDescription = "Bharati Vidyapeeth",
-                        modifier = Modifier.size(64.dp),
+                        contentDescription = "College Logo",
+                        modifier = Modifier.size(80.dp),
                         contentScale = ContentScale.Fit
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "BVCOE, Pune",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = TextSecondary,
-                            letterSpacing = 1.sp
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            letterSpacing = 0.5.sp
                         )
                     )
                 }
-                // Role badge + heading at bottom
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 24.dp, bottom = 20.dp)
+
+                // Left-aligned Role chip and Title
+                Surface(
+                    shape = CircleShape,
+                    color = roleBg
                 ) {
-                    RoleBadge(role = role)
-                    Spacer(Modifier.height(6.dp))
                     Text(
-                        "Sign in to continue",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TextPrimary
-                        )
+                        roleLabel,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = roleOn,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Sign in to continue",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(28.dp))
+
+            // ── Form card ─────────────────────────────────────────────────
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                tonalElevation = 1.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    AuthTextField(
+                        value = email,
+                        onValueChange = { email = it; errorMsg = null },
+                        label = "Email",
+                        placeholder = if (isAdmin) "admin@bvucoep.edu.in" else "rollno-branch@bvucoep.edu.in",
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next,
+                        onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
+                        trailingIcon = {
+                            AnimatedVisibility(visible = email.isNotEmpty()) {
+                                Icon(
+                                    imageVector = if (emailValid) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                                    contentDescription = null,
+                                    tint = if (emailValid) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        isError = emailInvalid,
+                        supportingText = if (emailInvalid) "Enter a valid email address" else null
+                    )
+
+                    AuthTextField(
+                        value = password,
+                        onValueChange = { password = it; errorMsg = null },
+                        label = "Password",
+                        placeholder = "••••••••",
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                        onImeAction = { focusManager.clearFocus() },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None
+                                               else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     )
                 }
             }
 
-            // ── Form Card ─────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(SurfaceWhite, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 28.dp)
+            Spacer(Modifier.height(12.dp))
+
+            // ── Error ─────────────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = errorMsg != null,
+                enter = fadeIn() + slideInVertically(),
+                exit = fadeOut(),
+                modifier = Modifier.padding(horizontal = 20.dp)
             ) {
-
-                // Info banner for students (admin adds accounts)
-                if (role == "STUDENT") {
-                    Surface(
-                        color = StudentLight,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Filled.Info,
-                                contentDescription = null,
-                                tint = StudentPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Your account is created by the Admin. Contact admin if you don't have credentials.",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = StudentPrimary,
-                                    lineHeight = 17.sp
-                                )
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(20.dp))
-                }
-
-                // Email Field
-                AuthTextField(
-                    value = email,
-                    onValueChange = { email = it; errorMsg = null },
-                    label = "Email Address",
-                    placeholder = if (role == "ADMIN") "admin@bvucoep.edu.in" else "rollno-branch@bvucoep.edu.in",
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next,
-                    onImeAction = { focusManager.moveFocus(FocusDirection.Down) },
-                    trailingIcon = {
-                        AnimatedVisibility(visible = email.isNotEmpty()) {
-                            Icon(
-                                imageVector = if (emailValid) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
-                                contentDescription = null,
-                                tint = if (emailValid) SuccessGreen else ErrorRed,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    isError = emailInvalid,
-                    supportingText = if (emailInvalid) "Enter a valid email address" else null
-                )
-
-                Spacer(Modifier.height(16.dp))
-
-                // Password Field
-                AuthTextField(
-                    value = password,
-                    onValueChange = { password = it; errorMsg = null },
-                    label = "Password",
-                    placeholder = "••••••••",
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                    onImeAction = { focusManager.clearFocus() },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None
-                                           else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = if (passwordVisible) Icons.Filled.VisibilityOff
-                                              else Icons.Filled.Visibility,
-                                contentDescription = "Toggle password",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                )
-
-                TextButton(
-                    onClick = { /* TODO: Password reset */ },
-                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
                 ) {
-                    Text(
-                        "Forgot Password?",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = roleColor,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // Error Banner
-                AnimatedVisibility(visible = errorMsg != null) {
-                    Surface(
-                        color = ErrorRedLight,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = errorMsg ?: "",
-                            style = MaterialTheme.typography.bodySmall.copy(color = ErrorRed),
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // ── Sign In Button → Firebase Auth → Direct Dashboard ──
-                PrimaryButton(
-                    text = "Sign In",
-                    color = roleColor,
-                    isLoading = isLoading,
-                    enabled = emailValid && password.length >= 6,
-                    onClick = {
-                        isLoading = true
-                        auth.signInWithEmailAndPassword(email, password)
-                            .addOnSuccessListener {
-                                isLoading = false
-                                onLoginSuccess(role)
-                            }
-                            .addOnFailureListener { e ->
-                                isLoading = false
-                                errorMsg = when {
-                                    e.message?.contains("password") == true ->
-                                        "Wrong password. Please try again."
-                                    e.message?.contains("no user") == true ||
-                                    e.message?.contains("identifier") == true ->
-                                        "No account found for this email."
-                                    else -> e.localizedMessage ?: "Login failed. Try again."
-                                }
-                            }
-                    }
-                )
-
-                if (role == "STUDENT") {
-                    Spacer(Modifier.height(16.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            Icons.Filled.Shield,
+                            Icons.Filled.ErrorOutline,
                             contentDescription = null,
-                            tint = AuthPurple,
-                            modifier = Modifier.size(14.dp)
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(Modifier.width(6.dp))
                         Text(
-                            "A one-time verification code will be sent to your email after sign-in.",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = TextSecondary,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 17.sp
+                            errorMsg ?: "",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         )
                     }
                 }
-
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.height(24.dp))
-
-                Text(
-                    "Bharati Vidyapeeth College of Engineering, Pune",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = TextHint,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
             }
-        }
-    }
-}
 
-// ─── Shared Auth Text Field ──────────────────────────────────────────────────
+            Spacer(Modifier.height(24.dp))
 
-@Composable
-fun AuthTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    placeholder: String = "",
-    keyboardType: KeyboardType = KeyboardType.Text,
-    imeAction: ImeAction = ImeAction.Next,
-    onImeAction: () -> Unit = {},
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailingIcon: @Composable (() -> Unit)? = null,
-    isError: Boolean = false,
-    supportingText: String? = null
-) {
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(
-                color = TextSecondary,
-                fontWeight = FontWeight.Medium
-            ),
-            modifier = Modifier.padding(bottom = 6.dp)
-        )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(placeholder, style = MaterialTheme.typography.bodyMedium.copy(color = TextHint))
-            },
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true,
-            visualTransformation = visualTransformation,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
-            keyboardActions = KeyboardActions(onAny = { onImeAction() }),
-            trailingIcon = trailingIcon,
-            isError = isError,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AuthPurple,
-                unfocusedBorderColor = Color(0xFFE2E8F0),
-                errorBorderColor = ErrorRed,
-                focusedContainerColor = SurfaceWhite,
-                unfocusedContainerColor = SurfaceWhite
-            )
-        )
-        if (supportingText != null && isError) {
+            // ── Sign in button ─────────────────────────────────────────────
+            Button(
+                onClick = {
+                    isLoading = true
+                    scope.launch {
+                        val result = authRepo.login(email, password)
+                        isLoading = false
+                        result.fold(
+                            onSuccess = { user ->
+                                if (user.role != role) {
+                                    authRepo.logout()
+                                    errorMsg = "Access denied. This account is not a $roleLabel."
+                                } else {
+                                    onLoginSuccess(user.role)
+                                }
+                            },
+                            onFailure = { e ->
+                                errorMsg = when {
+                                    e.message?.contains("401") == true -> "Invalid email or password."
+                                    e.message?.contains("connect") == true ||
+                                    e.message?.contains("timeout") == true ||
+                                    e.message?.contains("Unable to resolve") == true ->
+                                        "Cannot reach server. Check your WiFi connection."
+                                    else -> "Login failed. Please try again."
+                                }
+                            }
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .height(56.dp),
+                enabled = emailValid && password.length >= 6 && !isLoading,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = primaryColor,
+                    contentColor = if (isAdmin) MaterialTheme.colorScheme.onTertiary
+                                   else MaterialTheme.colorScheme.onSecondary
+                )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp,
+                        color = MaterialTheme.colorScheme.surface
+                    )
+                } else {
+                    Text(
+                        "Sign In",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(32.dp))
+
             Text(
-                text = supportingText,
-                style = MaterialTheme.typography.labelSmall.copy(color = ErrorRed),
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                "Bharati Vidyapeeth College of Engineering, Pune",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = MaterialTheme.colorScheme.outline,
+                    textAlign = TextAlign.Center
+                ),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             )
         }
     }

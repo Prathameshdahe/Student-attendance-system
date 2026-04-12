@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Attendance — BVCOE</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --indigo:   #4C2FF0;
+    --indigo-d: #3a21c4;
+    --indigo-l: #ede9fd;
+    --teal:     #006878;
+    --teal-l:   #e0f3f7;
+    --emerald:  #059669;
+    --emerald-l:#d1fae5;
+    --amber:    #D97706;
+    --amber-l:  #fef3c7;
+    --red:      #DC2626;
+    --red-l:    #fee2e2;
+    --gray-50:  #f8f7ff;
+    --gray-100: #f1effd;
+    --gray-200: #e4e1f7;
+    --gray-300: #cbc7e8;
+    --gray-500: #7c77a8;
+    --gray-700: #3d3a5e;
+    --gray-900: #1a1730;
+    --surface:  #ffffff;
+    --font-main:'DM Sans', sans-serif;
+    --font-mono:'Space Mono', monospace;
+    --radius:   12px;
+    --radius-sm:8px;
+    --shadow:   0 2px 8px rgba(76,47,240,0.06);
+  }
+
+  body {
+    font-family: var(--font-main);
+    background: var(--gray-50);
+    color: var(--gray-900);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── LOGIN ── */
+  .login-wrap {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .login-left {
+    background: linear-gradient(135deg, #1a105c 0%, #4C2FF0 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 3rem; color: white; position: relative; overflow: hidden; text-align: center;
+  }
+  .login-left::before {
+    content: ''; position: absolute; width: 600px; height: 600px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    top: -100px; right: -100px;
+  }
+  .brand-logo-img {
+    width: 120px; height: 120px; object-fit: contain; margin-bottom: 2rem;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  }
+  .login-left h1 { font-size: 2.4rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.5px; }
+  .login-left p  { font-size: 1.05rem; opacity: 0.8; max-width: 320px; line-height: 1.5; }
+
+  .login-right {
+    display: flex; align-items: center; justify-content: center; padding: 3rem; background: var(--surface);
+  }
+  .login-card { width: 100%; max-width: 400px; }
+  .login-card h2 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--gray-900); }
+  .login-card .sub { color: var(--gray-500); font-size: 0.95rem; margin-bottom: 2.5rem; }
+
+  label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+  input[type="email"], input[type="password"] {
+    width: 100%; padding: 0.8rem 1rem; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    font-family: var(--font-main); font-size: 0.95rem; color: var(--gray-900); background: #faf9ff;
+    outline: none; transition: all 0.2s; margin-bottom: 1.25rem;
+  }
+  input:focus { border-color: var(--indigo); background: var(--surface); box-shadow: 0 0 0 4px var(--indigo-l); }
+
+  .btn-primary {
+    width: 100%; padding: 0.85rem; background: var(--indigo); color: white;
+    border: none; border-radius: var(--radius-sm); font-family: var(--font-main);
+    font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .btn-primary:hover  { background: var(--indigo-d); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .err-msg {
+    background: var(--red-l); color: var(--red); padding: 0.8rem 1rem;
+    border-radius: var(--radius-sm); font-size: 0.9rem; margin-bottom: 1.5rem; font-weight: 500;
+  }
+
+  /* ── DASHBOARD LAYOUT ── */
+  .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--gray-200);
+    display: flex; align-items: center; padding: 0 2rem; height: 70px;
+    position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.25rem; color: var(--gray-900); }
+  .topbar-brand img { width: 32px; height: 32px; }
+  .topbar-sep { width: 1px; height: 28px; background: var(--gray-200); margin: 0 1.5rem; }
+  .topbar-title { font-size: 0.95rem; font-weight: 600; color: var(--gray-700); }
+  
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 1.5rem; }
+  .live-indicator { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; color: var(--emerald); background: var(--emerald-l); padding: 4px 12px; border-radius: 20px; }
+  .live-indicator::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(5,150,105,0.4); } 50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(5,150,105,0); } }
+  
+  .user-chip { font-size: 0.9rem; font-weight: 500; color: var(--gray-700); }
+  .btn-logout { padding: 6px 16px; border-radius: 20px; border: 1px solid var(--gray-300); background: transparent; font-family: var(--font-main); font-size: 0.85rem; font-weight: 500; color: var(--gray-700); cursor: pointer; transition: all 0.2s; }
+  .btn-logout:hover { border-color: var(--gray-900); color: var(--gray-900); background: var(--gray-100); }
+
+  .main-content {
+    flex: 1; padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%;
+    display: grid; grid-template-columns: 350px 1fr; gap: 2rem;
+  }
+
+  /* ── PANELS ── */
+  .panel {
+    background: var(--surface); border: 1px solid var(--gray-200);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header {
+    padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-100);
+    display: flex; justify-content: space-between; align-items: center; background: #faf9ff;
+  }
+  .panel-title { font-size: 1.05rem; font-weight: 700; color: var(--gray-900); }
+  .panel-meta { font-size: 0.8rem; color: var(--gray-500); font-family: var(--font-mono); }
+
+  /* ── LIVE FEED ── */
+  .feed-list { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; max-height: calc(100vh - 200px); }
+  .feed-item {
+    padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--gray-200);
+    background: var(--surface); animation: slideIn 0.3s ease; position: relative; overflow: hidden;
+  }
+  .feed-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+  .feed-item.in::before { background: var(--indigo); }
+  .feed-item.out::before { background: var(--emerald); }
+  
+  .feed-time { font-family: var(--font-mono); font-size: 0.75rem; color: var(--gray-500); margin-bottom: 4px; display: block; }
+  .feed-name { font-size: 0.95rem; font-weight: 600; color: var(--gray-900); }
+  .feed-action {
+    display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .feed-action.in { background: var(--indigo-l); color: var(--indigo); }
+  .feed-action.out { background: var(--emerald-l); color: var(--emerald); }
+  .empty-feed { text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.9rem; }
+
+  /* ── ROSTER TABLE ── */
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 1rem 1.5rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--gray-200); }
+  td { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.95rem; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #faf9ff; }
+
+  .roster-name { font-weight: 600; color: var(--gray-900); margin-bottom: 2px; }
+  .roster-meta { font-size: 0.8rem; color: var(--gray-500); font-family: var(--font-mono); }
+  .time-box { font-family: var(--font-mono); font-size: 0.85rem; color: var(--gray-900); background: var(--gray-50); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--gray-200); display: inline-block; }
+  .time-box.empty { color: var(--gray-300); background: transparent; border-color: transparent; }
+
+  .status-badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; }
+  .bg-pending { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
+  .bg-in { background: var(--indigo-l); color: var(--indigo); border: 1px solid rgba(76,47,240,0.2); }
+  .bg-out { background: var(--emerald-l); color: var(--emerald); border: 1px solid rgba(5,150,105,0.2); }
+
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
+  /* ── ANALYTICS ROW ── */
+  .analytics-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; padding: 1.5rem; background: #faf9ff; border-top: 1px solid var(--gray-100); }
+  .metric { display: flex; flex-direction: column; }
+  .metric-val { font-size: 2rem; font-weight: 700; color: var(--indigo); font-family: var(--font-mono); line-height: 1; margin-bottom: 4px;}
+  .metric-lbl { font-size: 0.8rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── MODAL ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(26,23,48,0.55); display: flex; align-items: flex-start; justify-content: center; z-index: 1000; overflow-y: auto; padding: 4rem 1rem; }
+  .modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: slideIn 0.2s ease; overflow: hidden; }
+  .modal-top { padding: 1.75rem 2rem; border-bottom: 1px solid var(--gray-200); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; background: #faf9ff; }
+  .modal-name { font-size: 1.3rem; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
+  .modal-meta { font-size: 0.85rem; color: var(--gray-500); font-family: var(--font-mono); }
+  .btn-dl { padding: 8px 16px; border-radius: var(--radius-sm); background: var(--indigo); color: white; border: none; font-family: var(--font-main); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+  .btn-dl:hover { background: var(--indigo-d); }
+  .btn-close { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--gray-200); background: transparent; cursor: pointer; font-size: 1rem; color: var(--gray-700); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .btn-close:hover { border-color: var(--red); color: var(--red); background: var(--red-l); }
+  .modal-body { padding: 2rem; }
+  
+  .btn-outline { padding: 6px 12px; border: 1px solid var(--gray-300); border-radius: var(--radius-sm); background: var(--surface); color: var(--gray-700); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+  .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-900); color: var(--gray-900); }
+
+  @media (max-width: 1024px) {
+    .main-content { grid-template-columns: 1fr; }
+    .login-wrap { grid-template-columns: 1fr; }
+    .login-left { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// ─────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────
+const API_BASE = "http://192.168.10.40:8000";
+
+// ─────────────────────────────────────────────
+// API FETCHERS
+// ─────────────────────────────────────────────
+
+async function apiLogin(email, password) {
+  try {
+    const r = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    if (!r.ok) throw new Error("Invalid credentials");
+    return await r.json();
+  } catch (err) {
+    throw new Error("Unable to reach server or invalid credentials.");
+  }
+}
+
+async function apiFetchStudents(token) {
+  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed to fetch students");
+  return await r.json();
+}
+
+async function apiFetchLiveToday(token) {
+  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed to fetch live attendance");
+  return await r.json(); // Returns [{id, student_id, name, roll, status: "IN"|"COMPLETED", time_in, time_out}]
+}
+
+// ─────────────────────────────────────────────
+// COMPONENTS
+// ─────────────────────────────────────────────
+
+function downloadStudentPDF(student, record) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Branding Map
+  doc.setFillColor(76, 47, 240); // Indigo
+  doc.rect(0, 0, 210, 30, "F");
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16); doc.setFont(undefined, "bold");
+  doc.text("Smart Attendance Report", 14, 13);
+  
+  doc.setFontSize(9); doc.setFont(undefined, "normal");
+  doc.text("Bharati Vidyapeeth College of Engineering, Pune", 14, 21);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 110, 21);
+
+  // Student Info
+  doc.setTextColor(26, 23, 48);
+  doc.setFontSize(14); doc.setFont(undefined, "bold");
+  doc.text(student.name, 14, 45);
+  
+  doc.setFontSize(10); doc.setFont(undefined, "normal");
+  doc.setTextColor(100, 100, 130);
+  doc.text(`Roll No: ${student.roll}`, 14, 52);
+  doc.text(`Email: ${student.email}`, 14, 58);
+  doc.text(`Division: ${student.division}`, 14, 64);
+  
+  // Table Box
+  doc.setFillColor(248,247,255); 
+  doc.rect(14, 80, 182, 10, "F");
+  doc.setFontSize(8); doc.setFont(undefined, "bold"); doc.setTextColor(120,115,160);
+  doc.text("DATE", 18, 86.5);
+  doc.text("STATUS", 60, 86.5);
+  doc.text("CHECK IN", 110, 86.5);
+  doc.text("CHECK OUT", 155, 86.5);
+
+  const status = record ? record.status : "ABSENT";
+  const timeIn = record?.time_in || "—";
+  const timeOut = record?.time_out || "—";
+  const todayDate = new Date().toISOString().split("T")[0];
+
+  doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(26,23,48);
+  doc.text(todayDate, 18, 98);
+  
+  if (status === "COMPLETED") doc.setTextColor(5,150,105);
+  else if (status === "IN") doc.setTextColor(76,47,240);
+  else doc.setTextColor(220,38,38);
+  
+  doc.setFont(undefined, "bold");
+  doc.text(status, 60, 98);
+  
+  doc.setFont(undefined, "normal"); doc.setTextColor(100,100,130);
+  doc.text(timeIn, 110, 98);
+  doc.text(timeOut, 155, 98);
+
+  // Sign off
+  doc.setFontSize(8); doc.setTextColor(150, 150, 170);
+  doc.text("_________________________", 140, 160);
+  doc.text("Authorized Faculty Signature", 143, 165);
+
+  doc.save(`Attendance_${student.roll}_${todayDate}.pdf`);
+}
+
+function StudentModal({ student, record, onClose }) {
+  const status = record ? record.status : "ABSENT";
+  const badgeClass = status === "COMPLETED" ? "bg-out" : status === "IN" ? "bg-in" : "bg-pending";
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <div className="modal-name">{student.name}</div>
+            <div className="modal-meta">{student.roll} · Div {student.division}</div>
+          </div>
+          <button className="btn-close" onClick={onClose}>✕</button>
+        </div>
+        
+        <div className="modal-body">
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"2rem"}}>
+            <div>
+              <div style={{fontSize:"0.75rem", color:"var(--gray-500)", fontWeight:"600", marginBottom:"4px"}}>TODAY'S STATUS</div>
+              <span className={`status-badge ${badgeClass}`}>{status}</span>
+            </div>
+            <button className="btn-dl" onClick={()=>downloadStudentPDF(student, record)}>↓ Download PDF</button>
+          </div>
+          
+          <div style={{background:"var(--gray-50)", padding:"1.5rem", borderRadius:"12px", border:"1px solid var(--gray-200)"}}>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem"}}>
+              <div>
+                <div style={{fontSize:"0.7rem", color:"var(--gray-500)", fontWeight:"700", textTransform:"uppercase", marginBottom:"4px"}}>Time In</div>
+                <div style={{fontSize:"1.1rem", fontFamily:"var(--font-mono)", fontWeight:"600", color:"var(--gray-900)"}}>{record?.time_in || "—"}</div>
+              </div>
+              <div>
+                <div style={{fontSize:"0.7rem", color:"var(--gray-500)", fontWeight:"700", textTransform:"uppercase", marginBottom:"4px"}}>Time Out</div>
+                <div style={{fontSize:"1.1rem", fontFamily:"var(--font-mono)", fontWeight:"600", color:"var(--gray-900)"}}>{record?.time_out || "—"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginPage({ onLogin }) {
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      const data = await apiLogin(email, password);
+      onLogin(data);
+    } catch(err) {
+      setError(err.message);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="login-wrap">
+      <div className="login-left">
+        <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="BVCOE Logo" className="brand-logo-img" />
+        <h1>Smart Attendance</h1>
+        <p>Real-time campus check-in and check-out monitoring system for Bharati Vidyapeeth College of Engineering.</p>
+      </div>
+      <div className="login-right">
+        <div className="login-card">
+          <h2>Admin Login</h2>
+          <p className="sub">Access the live monitoring dashboard</p>
+          {error && <div className="err-msg">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            <div>
+              <label>Administrator Email</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@bvucoep.edu.in" required />
+            </div>
+            <div>
+              <label>Password</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required />
+            </div>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? "Authenticating…" : "Access Dashboard →"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function Dashboard({ session, onLogout }) {
+  const [students, setStudents] = React.useState([]);
+  const [records, setRecords] = React.useState([]); // Today's live records
+  const [loading, setLoading] = React.useState(true);
+  const [lastSync, setLastSync] = React.useState(new Date());
+  const [selectedStudent, setSelectedStudent] = React.useState(null);
+
+  const loadData = React.useCallback(async () => {
+    try {
+      // Fetch roster
+      if(students.length === 0) {
+        const stds = await apiFetchStudents(session.token);
+        setStudents(stds);
+      }
+      // Fetch live today's feed
+      const recs = await apiFetchLiveToday(session.token);
+      setRecords(recs);
+      setLastSync(new Date());
+      setLoading(false);
+    } catch(e) {
+      console.error(e);
+      setLoading(false);
+    }
+  }, [session.token, students.length]);
+
+  React.useEffect(() => { loadData(); }, [loadData]);
+  React.useEffect(() => {
+    const t = setInterval(loadData, 5000); // Aggressive 5-second polling for real-time feel
+    return () => clearInterval(t);
+  }, [loadData]);
+
+  // Transform records into a chronological feed of distinct events (Check-ins and Check-outs)
+  const feedEvents = [];
+  records.forEach(r => {
+    if(r.time_in) feedEvents.push({ type: 'IN', time: r.time_in, name: r.name, roll: r.roll });
+    if(r.time_out) feedEvents.push({ type: 'OUT', time: r.time_out, name: r.name, roll: r.roll });
+  });
+  
+  // Sort descending by time (simple locale string comparison works if zero-padded or AM/PM parsed, but let's just reverse assumption as they usually arrive in order, or we can sort)
+  // For safety, let's reverse the feed to show newest first, assuming records are returned ordered and out comes after in.
+  feedEvents.reverse();
+
+  // Metrics
+  const totalIn = records.length;
+  const currentlyActive = records.filter(r => r.status === 'IN').length;
+  const completed = records.filter(r => r.status === 'COMPLETED').length;
+
+  return (
+    <div className="app-shell">
+      <div className="topbar">
+        <div className="topbar-brand">
+          <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="Logo" />
+          KIWI
+        </div>
+        <div className="topbar-sep" />
+        <div className="topbar-title">Live Campus Analytics</div>
+        <div className="topbar-right">
+          <div className="live-indicator">LIVE FEED</div>
+          <div className="user-chip">{session.name}</div>
+          <button className="btn-logout" onClick={onLogout}>Sign out</button>
+        </div>
+      </div>
+
+      <div className="main-content">
+        
+        {/* LEFT: LIVE FEED */}
+        <div className="panel" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+          <div className="panel-header">
+            <div className="panel-title">Activity Feed</div>
+            <div className="panel-meta">Today</div>
+          </div>
+          <div className="feed-list">
+            {feedEvents.length === 0 && (
+              <div className="empty-feed">
+                <div style={{fontSize:"2rem", marginBottom:"1rem"}}>📭</div>
+                No scans recorded yet today.<br/>Waiting for activity...
+              </div>
+            )}
+            {feedEvents.map((ev, i) => (
+              <div key={i} className={`feed-item ${ev.type.toLowerCase()}`}>
+                <span className="feed-time">{ev.time}</span>
+                <div className="feed-name">{ev.name}</div>
+                <div style={{fontSize:"0.75rem", color:"var(--gray-500)", marginTop:"2px"}}>{ev.roll}</div>
+                <span className={`feed-action ${ev.type.toLowerCase()}`}>
+                  {ev.type === 'IN' ? 'Checked In' : 'Checked Out'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT: ROSTER & ANALYTICS */}
+        <div style={{display:"flex", flexDirection:"column", gap:"2rem"}}>
+          
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title">Daily Roster</div>
+              <div className="panel-meta">Last sync: {lastSync.toLocaleTimeString()}</div>
+            </div>
+            
+            {loading && students.length === 0 ? (
+              <div style={{padding:"3rem", textAlign:"center", color:"var(--gray-500)"}}>Loading roster...</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student Details</th>
+                    <th>Status</th>
+                    <th>Time In</th>
+                    <th>Time Out</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map(s => {
+                    const rec = records.find(r => r.student_id === s.id);
+                    const status = !rec ? 'PENDING' : rec.status; // PENDING, IN, COMPLETED
+                    
+                    return (
+                      <tr key={s.id}>
+                        <td>
+                          <div className="roster-name">{s.name}</div>
+                          <div className="roster-meta">{s.roll} · Div {s.division}</div>
+                        </td>
+                        <td>
+                          {status === 'PENDING' && <span className="status-badge bg-pending">PENDING</span>}
+                          {status === 'IN' && <span className="status-badge bg-in">ACTIVE (IN)</span>}
+                          {status === 'COMPLETED' && <span className="status-badge bg-out">COMPLETED</span>}
+                        </td>
+                        <td>
+                          <span className={`time-box ${!rec?.time_in ? 'empty' : ''}`}>
+                            {rec?.time_in || '--:--'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`time-box ${!rec?.time_out ? 'empty' : ''}`}>
+                            {rec?.time_out || '--:--'}
+                          </span>
+                        </td>
+                        <td>
+                          <button className="btn-outline" onClick={()=>setSelectedStudent({student: s, record: rec})}>
+                            View Data
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            <div className="analytics-row">
+              <div className="metric">
+                <span className="metric-val">{totalIn}</span>
+                <span className="metric-lbl">Total Scanned In</span>
+              </div>
+              <div className="metric">
+                <span className="metric-val">{currentlyActive}</span>
+                <span className="metric-lbl">Currently On Campus</span>
+              </div>
+              <div className="metric">
+                <span className="metric-val">{completed}</span>
+                <span className="metric-lbl">Departures</span>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+
+      </div>
+
+      {selectedStudent && (
+        <StudentModal 
+          student={selectedStudent.student} 
+          record={selectedStudent.record} 
+          onClose={()=>setSelectedStudent(null)} 
+        />
+      )}
+    </div>
+  );
+}
+
+// ── App Container ──
+function App() {
+  const [session, setSession] = React.useState(() => {
+    try { const s = sessionStorage.getItem("kiwi_live_session"); return s ? JSON.parse(s) : null; }
+    catch { return null; }
+  });
+
+  const handleLogin = (data) => {
+    setSession(data);
+    sessionStorage.setItem("kiwi_live_session", JSON.stringify(data));
+  };
+
+  const handleLogout = () => {
+    setSession(null);
+    sessionStorage.removeItem("kiwi_live_session");
+  };
+
+  return session ? <Dashboard session={session} onLogout={handleLogout} /> : <LoginPage onLogin={handleLogin} />;
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>

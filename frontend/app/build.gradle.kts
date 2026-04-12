@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.google.services)
 }
 
 android {
@@ -50,12 +49,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
-    
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.authentication)
-    implementation(libs.firebase.firestore)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -70,9 +63,15 @@ dependencies {
     // Animations & ViewModel
     implementation(libs.lottie.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    
+
     // HTTP Networking
     implementation(libs.okhttp)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+
+    // Secure token storage
+    implementation(libs.androidx.security.crypto)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

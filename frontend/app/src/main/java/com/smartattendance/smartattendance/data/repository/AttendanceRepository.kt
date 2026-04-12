@@ -1,88 +1,72 @@
 package com.smartattendance.smartattendance.data.repository
 
-import com.google.firebase.firestore.FirebaseFirestore
+import android.content.Context
+import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.model.Attendance
 import com.smartattendance.smartattendance.data.model.User
-import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+import com.smartattendance.smartattendance.data.remote.ApiClient
+import com.smartattendance.smartattendance.data.remote.ScanRequest
+import com.smartattendance.smartattendance.data.remote.ScanResponse
 
-class AttendanceRepository(
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
-) {
+/**
+ * Placeholder AttendanceRepository — Firebase removed.
+ * QR check-in/check-out logic will be wired to backend API endpoints in the next milestone.
+ */
+class AttendanceRepository(context: Context) {
+
+    private val session = SessionManager(context)
+
     private val todayDate: String
         get() = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-    /** Called by Admin when they scan the student's QR code */
+    /** Returns the current user's ID from the stored JWT session */
+    fun getCurrentUserId(): String = session.getUserId() ?: ""
+
+    /** Returns the current user's name */
+    fun getCurrentUserName(): String = session.getUserName() ?: "Student"
+
+    /** Returns the current user's role */
+    fun getCurrentUserRole(): String = session.getRole() ?: "STUDENT"
+
+    /**
+     * Generates a local QR token payload for the student.
+     * Format: "studentId::uuid" — validated by the Admin scanner against the backend.
+     */
+    fun generateQrToken(): String {
+        val uid = getCurrentUserId()
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        return "${uid}::${date}"
+    }
+
+    suspend fun scanQr(qrPayload: String): Result<ScanResponse> {
+        return try {
+            val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
+            val adminId = getCurrentUserId()
+            val req = ScanRequest(qr_payload = qrPayload, scanned_by = adminId)
+            val response = ApiClient.api.scanQr("Bearer $token", req)
+            Result.success(response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // ── Stub methods — to be replaced with Retrofit calls in milestone 2 ────
+
     suspend fun markCheckIn(studentId: String): Result<Unit> {
-        return try {
-            val docId = "${studentId}_${todayDate}"
-            val existing = firestore.collection("attendance_logs")
-                .document(docId).get().await()
-
-            if (existing.exists()) {
-                Result.failure(Exception("Student already checked in today"))
-            } else {
-                val log = Attendance(
-                    id = docId,
-                    studentId = studentId,
-                    date = todayDate,
-                    checkIn = System.currentTimeMillis(),
-                    status = "PRESENT"
-                )
-                firestore.collection("attendance_logs").document(docId).set(log).await()
-                Result.success(Unit)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return Result.failure(NotImplementedError("Backend QR check-in coming soon"))
     }
 
-    /** Called by Admin when they scan the student's QR code a second time */
     suspend fun markCheckOut(studentId: String): Result<Unit> {
-        return try {
-            val docId = "${studentId}_${todayDate}"
-            firestore.collection("attendance_logs").document(docId)
-                .update("check_out", System.currentTimeMillis()).await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return Result.failure(NotImplementedError("Backend QR check-out coming soon"))
     }
 
-    /** Fetches today's attendance log for a specific student */
     suspend fun getTodayLog(studentId: String): Result<Attendance?> {
-        return try {
-            val docId = "${studentId}_${todayDate}"
-            val doc = firestore.collection("attendance_logs").document(docId).get().await()
-            Result.success(doc.toObject(Attendance::class.java))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return Result.success(null)
     }
 
-    /** Fetches all students currently checked in (for Admin dashboard) */
     suspend fun getPresentStudents(): Result<List<User>> {
-        return try {
-            // Get all attendance logs for today
-            val logs = firestore.collection("attendance_logs")
-                .whereEqualTo("date", todayDate)
-                .whereEqualTo("status", "PRESENT")
-                .get().await()
-
-            val studentIds = logs.documents.mapNotNull { it.getString("student_id") }
-
-            if (studentIds.isEmpty()) return Result.success(emptyList())
-
-            // Batch fetch student data
-            val students = studentIds.map { uid ->
-                firestore.collection("users").document(uid).get().await()
-                    .toObject(User::class.java)
-            }.filterNotNull()
-
-            Result.success(students)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return Result.success(emptyList())
     }
 }

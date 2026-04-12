@@ -6,18 +6,22 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.google.firebase.auth.FirebaseAuth
+import com.smartattendance.smartattendance.data.local.SessionManager
+import com.smartattendance.smartattendance.data.repository.AuthRepository
 import com.smartattendance.smartattendance.ui.screens.*
 import com.smartattendance.smartattendance.ui.theme.SmartAttendanceTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,21 +38,48 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SmartAttendanceApp() {
     val navController = rememberNavController()
-    var selectedRole by remember { mutableStateOf("STUDENT") }
+    val context = LocalContext.current
 
-    NavHost(navController = navController, startDestination = "welcome") {
+    // null = still loading, "" = not logged in, "student_home" / "admin_home" = logged in
+    var startDest by remember { mutableStateOf<String?>(null) }
 
-        // ── Screen 1: Welcome / Role Select ─────────────────────────────────
+    // Check session off the main thread to avoid ANR from EncryptedSharedPreferences crypto
+    LaunchedEffect(Unit) {
+        val dest = withContext(Dispatchers.IO) {
+            try {
+                val session = SessionManager(context)
+                if (session.isLoggedIn()) {
+                    if (session.getRole() == "ADMIN") "admin_home" else "student_home"
+                } else {
+                    "welcome"
+                }
+            } catch (e: Exception) {
+                "welcome"
+            }
+        }
+        startDest = dest
+    }
+
+    // Show loading spinner until session check completes
+    if (startDest == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    NavHost(navController = navController, startDestination = startDest!!) {
+
+        // ── Welcome / Role Select ─────────────────────────────────────────────
         composable("welcome") {
             WelcomeScreen(
                 onNavigateToLogin = { role ->
-                    selectedRole = role
                     navController.navigate("login/$role")
                 }
             )
         }
 
-        // ── Screen 2: Login ──────────────────────────────────────────────────
+        // ── Login ─────────────────────────────────────────────────────────────
         composable(
             route = "login/{role}",
             arguments = listOf(navArgument("role") { type = NavType.StringType })
@@ -58,94 +89,42 @@ fun SmartAttendanceApp() {
                 role = role,
                 onBack = { navController.popBackStack() },
                 onLoginSuccess = { successRole ->
-                    if (successRole == "ADMIN") {
-                        navController.navigate("admin_home") {
-                            popUpTo("welcome") { inclusive = true }
-                        }
-                    } else {
-                        navController.navigate("student_home") {
-                            popUpTo("welcome") { inclusive = true }
-                        }
-                    }
-                }
-            )
-        }
-
-        // ── Phone SMS OTP 2FA (Student only) ─────────────────────────────────
-        composable(
-            route = "otp/{phone}",
-            arguments = listOf(navArgument("phone") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val phoneArg = backStackEntry.arguments?.getString("phone") ?: ""
-            val phone = phoneArg.replace("P", "+")
-            
-            OtpScreen(
-                phoneNumber = phone,
-                onBack = {
-                    FirebaseAuth.getInstance().signOut()
-                    navController.navigate("welcome") {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
-                onVerified = {
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        .collection("users").document(FirebaseAuth.getInstance().currentUser?.uid ?: "")
-                        .get().addOnSuccessListener { doc ->
-                            val studentName = doc.getString("name") ?: "Student"
-                            navController.navigate("success/STUDENT/$studentName") {
-                                popUpTo("welcome") { inclusive = true }
-                            }
-                        }
-                }
-            )
-        }
-
-        // ── Success Screen ───────────────────────────────────────────────────
-        composable(
-            route = "success/{role}/{name}",
-            arguments = listOf(
-                navArgument("role") { type = NavType.StringType },
-                navArgument("name") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val role = backStackEntry.arguments?.getString("role") ?: selectedRole
-            val name = backStackEntry.arguments?.getString("name") ?: ""
-            SuccessScreen(
-                userName = name,
-                role = role,
-                onGoToDashboard = {
-                    navController.navigate("student_home") {
+                    val dest = if (successRole == "ADMIN") "admin_home" else "student_home"
+                    navController.navigate(dest) {
                         popUpTo("welcome") { inclusive = true }
                     }
                 }
             )
         }
 
-        // ── Student Home ─────────────────────────────────────────────────────
+        // ── Student Home ──────────────────────────────────────────────────────
         composable("student_home") {
             StudentHomeScreen(
                 onLogout = {
-                    FirebaseAuth.getInstance().signOut()
+                    // Clear session off main thread too
+                    val repo = AuthRepository(context)
+                    repo.logout()
                     navController.navigate("welcome") { popUpTo(0) { inclusive = true } }
                 }
             )
         }
 
-        // ── Admin Home ───────────────────────────────────────────────────────
+        // ── Admin Home ────────────────────────────────────────────────────────
         composable("admin_home") {
             AdminHomeScreen(
                 onLogout = {
-                    FirebaseAuth.getInstance().signOut()
+                    val repo = AuthRepository(context)
+                    repo.logout()
                     navController.navigate("welcome") { popUpTo(0) { inclusive = true } }
                 },
                 onScanQr = { navController.navigate("qr_scanner") }
             )
         }
 
-        // ── QR Scanner (next milestone) ──────────────────────────────────────
+        // ── QR Scanner ────────────────────────────────────────────────────────
         composable("qr_scanner") {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("QR Scanner — Coming Next")
+                androidx.compose.material3.Text("QR Scanner — Coming Soon")
             }
         }
     }

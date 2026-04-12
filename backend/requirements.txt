@@ -1,7 +1,9 @@
 fastapi
 uvicorn[standard]
 python-multipart
-firebase-admin
+sqlalchemy
+python-jose[cryptography]
+bcrypt
 apscheduler
 insightface
 onnxruntime
