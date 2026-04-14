@@ -26,6 +26,13 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Prevent screenshots and screen recording app-wide
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE
+        )
+        
         enableEdgeToEdge()
         setContent {
             SmartAttendanceTheme {
@@ -101,11 +108,20 @@ fun SmartAttendanceApp() {
         composable("student_home") {
             StudentHomeScreen(
                 onLogout = {
-                    // Clear session off main thread too
                     val repo = AuthRepository(context)
                     repo.logout()
                     navController.navigate("welcome") { popUpTo(0) { inclusive = true } }
+                },
+                onViewHistory = {
+                    navController.navigate("student_history")
                 }
+            )
+        }
+
+        // ── Student Attendance History ────────────────────────────────────────
+        composable("student_history") {
+            AttendanceHistoryScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 

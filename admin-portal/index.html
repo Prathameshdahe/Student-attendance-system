@@ -3,347 +3,518 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Smart Attendance — BVCOE</title>
+<title>Smart Attendance — BVCOE Admin</title>
+<meta name="description" content="Real-time campus attendance monitoring dashboard for Bharati Vidyapeeth College of Engineering, Pune." />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
 <style>
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --indigo:   #4C2FF0;
-    --indigo-d: #3a21c4;
-    --indigo-l: #ede9fd;
-    --teal:     #006878;
-    --teal-l:   #e0f3f7;
-    --emerald:  #059669;
-    --emerald-l:#d1fae5;
-    --amber:    #D97706;
-    --amber-l:  #fef3c7;
-    --red:      #DC2626;
-    --red-l:    #fee2e2;
-    --gray-50:  #f8f7ff;
-    --gray-100: #f1effd;
-    --gray-200: #e4e1f7;
-    --gray-300: #cbc7e8;
-    --gray-500: #7c77a8;
-    --gray-700: #3d3a5e;
-    --gray-900: #1a1730;
-    --surface:  #ffffff;
-    --font-main:'DM Sans', sans-serif;
-    --font-mono:'Space Mono', monospace;
-    --radius:   12px;
-    --radius-sm:8px;
-    --shadow:   0 2px 8px rgba(76,47,240,0.06);
+    --bg:         #f3f4f6;
+    --bg2:        #ffffff;
+    --surface:    #ffffff;
+    --surface2:   #f9fafb;
+    --border:     #e5e7eb;
+    --border2:    #d1d5db;
+    --indigo:     #2563eb;
+    --indigo-d:   #1d4ed8;
+    --indigo-glow:rgba(37,99,235,0.1);
+    --emerald:    #059669;
+    --emerald-glow:rgba(5,150,105,0.1);
+    --amber:      #d97706;
+    --amber-glow: rgba(217,119,6,0.1);
+    --red:        #dc2626;
+    --red-glow:   rgba(220,38,38,0.1);
+    --cyan:       #0891b2;
+    --text:       #111827;
+    --text2:      #4b5563;
+    --text3:      #6b7280;
+    --font:       'Inter', sans-serif;
+    --mono:       'JetBrains Mono', monospace;
+    --r:          8px;
+    --r-sm:       4px;
+    --trans:      all 0.15s ease-in-out;
   }
 
+  html { scroll-behavior: smooth; }
   body {
-    font-family: var(--font-main);
-    background: var(--gray-50);
-    color: var(--gray-900);
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
+
+  .ambient { display: none; }
 
   /* ── LOGIN ── */
-  .login-wrap {
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
+  .login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
   .login-left {
-    background: linear-gradient(135deg, #1a105c 0%, #4C2FF0 100%);
+    background: var(--indigo);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: 3rem; color: white; position: relative; overflow: hidden; text-align: center;
+    padding: 3rem; text-align: center; color: white;
   }
-  .login-left::before {
-    content: ''; position: absolute; width: 600px; height: 600px;
-    border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-    top: -100px; right: -100px;
+  .brand-logo-img { width: 100px; height: 100px; object-fit: contain; margin-bottom: 2rem; }
+  .login-left h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 1rem; }
+  .login-left p { font-size: 1rem; opacity: 0.9; max-width: 300px; line-height: 1.6; }
+
+  .glass-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
   }
-  .brand-logo-img {
-    width: 120px; height: 120px; object-fit: contain; margin-bottom: 2rem;
-    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
-  }
-  .login-left h1 { font-size: 2.4rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.5px; }
-  .login-left p  { font-size: 1.05rem; opacity: 0.8; max-width: 320px; line-height: 1.5; }
 
   .login-right {
-    display: flex; align-items: center; justify-content: center; padding: 3rem; background: var(--surface);
+    display: flex; align-items: center; justify-content: center; padding: 3rem;
+    background: var(--bg2);
   }
   .login-card { width: 100%; max-width: 400px; }
-  .login-card h2 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--gray-900); }
-  .login-card .sub { color: var(--gray-500); font-size: 0.95rem; margin-bottom: 2.5rem; }
+  .login-card h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .login-card .sub { color: var(--text2); font-size: 0.95rem; margin-bottom: 2rem; }
 
-  label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+  .input-wrap { margin-bottom: 1.25rem; }
   input[type="email"], input[type="password"] {
-    width: 100%; padding: 0.8rem 1rem; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
-    font-family: var(--font-main); font-size: 0.95rem; color: var(--gray-900); background: #faf9ff;
-    outline: none; transition: all 0.2s; margin-bottom: 1.25rem;
+    width: 100%; padding: 0.75rem 1rem;
+    background: var(--bg); border: 1px solid var(--border2);
+    border-radius: var(--r-sm); color: var(--text);
+    font-family: var(--font); font-size: 0.95rem; outline: none; transition: var(--trans);
   }
-  input:focus { border-color: var(--indigo); background: var(--surface); box-shadow: 0 0 0 4px var(--indigo-l); }
+  input:focus { border-color: var(--indigo); box-shadow: 0 0 0 2px var(--indigo-glow); background: var(--surface); }
+  input::placeholder { color: var(--text3); }
 
   .btn-primary {
-    width: 100%; padding: 0.85rem; background: var(--indigo); color: white;
-    border: none; border-radius: var(--radius-sm); font-family: var(--font-main);
-    font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    width: 100%; padding: 0.85rem;
+    background: var(--indigo);
+    color: white; border: none; border-radius: var(--r-sm);
+    font-family: var(--font); font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: var(--trans);
   }
-  .btn-primary:hover  { background: var(--indigo-d); transform: translateY(-1px); }
-  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:hover { background: var(--indigo-d); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .err-msg {
-    background: var(--red-l); color: var(--red); padding: 0.8rem 1rem;
-    border-radius: var(--radius-sm); font-size: 0.9rem; margin-bottom: 1.5rem; font-weight: 500;
+    background: #fef2f2; border: 1px solid #f87171;
+    color: var(--red); padding: 0.8rem 1rem; border-radius: var(--r-sm);
+    font-size: 0.9rem; margin-bottom: 1.5rem; font-weight: 500;
   }
 
-  /* ── DASHBOARD LAYOUT ── */
+  /* ── DASHBOARD SHELL ── */
   .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
-  .topbar {
-    background: var(--surface); border-bottom: 1px solid var(--gray-200);
-    display: flex; align-items: center; padding: 0 2rem; height: 70px;
-    position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
-  }
-  .topbar-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.25rem; color: var(--gray-900); }
-  .topbar-brand img { width: 32px; height: 32px; }
-  .topbar-sep { width: 1px; height: 28px; background: var(--gray-200); margin: 0 1.5rem; }
-  .topbar-title { font-size: 0.95rem; font-weight: 600; color: var(--gray-700); }
-  
-  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 1.5rem; }
-  .live-indicator { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 600; color: var(--emerald); background: var(--emerald-l); padding: 4px 12px; border-radius: 20px; }
-  .live-indicator::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(5,150,105,0.4); } 50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(5,150,105,0); } }
-  
-  .user-chip { font-size: 0.9rem; font-weight: 500; color: var(--gray-700); }
-  .btn-logout { padding: 6px 16px; border-radius: 20px; border: 1px solid var(--gray-300); background: transparent; font-family: var(--font-main); font-size: 0.85rem; font-weight: 500; color: var(--gray-700); cursor: pointer; transition: all 0.2s; }
-  .btn-logout:hover { border-color: var(--gray-900); color: var(--gray-900); background: var(--gray-100); }
 
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 2rem; height: 60px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: var(--text); }
+  .topbar-brand img { width: 28px; height: 28px; filter: brightness(0.2); }
+  .topbar-sep { width: 1px; height: 20px; background: var(--border2); margin: 0 1.25rem; }
+  .topbar-title { font-size: 0.9rem; font-weight: 500; color: var(--text2); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 1rem; }
+
+  .live-beacon {
+    display: flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600;
+    padding: 4px 10px; border-radius: 20px;
+  }
+  .live-beacon.live { background: #ecfdf5; border: 1px solid #6ee7b7; color: var(--emerald); }
+  .live-beacon.offline { background: #fef2f2; border: 1px solid #fca5a5; color: var(--red); }
+  .beacon-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .live-beacon.live .beacon-dot { background: var(--emerald); }
+  .live-beacon.offline .beacon-dot { background: var(--red); }
+
+  .user-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; font-size: 0.85rem; font-weight: 500; }
+  .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--indigo); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; }
+
+  .btn-logout { padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; font-family: var(--font); font-size: 0.8rem; font-weight: 500; color: var(--text2); cursor: pointer; transition: var(--trans); }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); background: #fef2f2; }
+
+  /* ── MAIN LAYOUT ── */
   .main-content {
-    flex: 1; padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%;
-    display: grid; grid-template-columns: 350px 1fr; gap: 2rem;
+    flex: 1; padding: 2rem; max-width: 1200px; margin: 0 auto; width: 100%;
+    display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem;
   }
 
   /* ── PANELS ── */
   .panel {
-    background: var(--surface); border: 1px solid var(--gray-200);
-    border-radius: var(--radius); box-shadow: var(--shadow);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
     display: flex; flex-direction: column; overflow: hidden;
   }
   .panel-header {
-    padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-100);
-    display: flex; justify-content: space-between; align-items: center; background: #faf9ff;
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; background: var(--surface2);
   }
-  .panel-title { font-size: 1.05rem; font-weight: 700; color: var(--gray-900); }
-  .panel-meta { font-size: 0.8rem; color: var(--gray-500); font-family: var(--font-mono); }
+  .panel-title { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+  .panel-meta { font-size: 0.75rem; color: var(--text3); }
+
+  /* ── OCCUPANCY BAR ── */
+  .occupancy-wrap { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+  .occupancy-label { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+  .occupancy-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .occupancy-fill { height: 100%; border-radius: 4px; background: var(--indigo); transition: width 0.5s ease; }
+
+  /* ── METRICS ROW ── */
+  .metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); background: var(--surface2); }
+  .metric-cell { padding: 1rem; border-right: 1px solid var(--border); text-align: center; }
+  .metric-cell:last-child { border-right: none; }
+  .metric-val { font-size: 1.5rem; font-weight: 700; line-height: 1; margin-bottom: 4px; color: var(--text); }
+  .metric-lbl { font-size: 0.7rem; font-weight: 600; color: var(--text3); text-transform: uppercase; }
 
   /* ── LIVE FEED ── */
-  .feed-list { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; max-height: calc(100vh - 200px); }
+  .feed-list { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; max-height: calc(100vh - 280px); }
+  .feed-list::-webkit-scrollbar { width: 6px; }
+  .feed-list::-webkit-scrollbar-track { background: transparent; }
+  .feed-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
   .feed-item {
-    padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--gray-200);
-    background: var(--surface); animation: slideIn 0.3s ease; position: relative; overflow: hidden;
+    padding: 0.75rem; border-radius: var(--r-sm);
+    border: 1px solid var(--border); background: var(--surface);
+    display: flex; align-items: center; gap: 10px;
   }
-  .feed-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
-  .feed-item.in::before { background: var(--indigo); }
-  .feed-item.out::before { background: var(--emerald); }
+  .feed-time { font-size: 0.75rem; color: var(--text3); min-width: 65px; text-align: center; }
+  .feed-name { font-size: 0.85rem; font-weight: 600; flex: 1; }
+  .feed-pill {
+    padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+  }
+  .feed-pill.in { background: #dbeafe; color: var(--indigo-d); }
+  .feed-pill.out { background: #d1fae5; color: var(--emerald); }
+  .feed-pill.exit { background: #fef3c7; color: var(--amber); }
   
-  .feed-time { font-family: var(--font-mono); font-size: 0.75rem; color: var(--gray-500); margin-bottom: 4px; display: block; }
-  .feed-name { font-size: 0.95rem; font-weight: 600; color: var(--gray-900); }
-  .feed-action {
-    display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  }
-  .feed-action.in { background: var(--indigo-l); color: var(--indigo); }
-  .feed-action.out { background: var(--emerald-l); color: var(--emerald); }
-  .empty-feed { text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.9rem; }
+  .empty-feed { text-align: center; padding: 2rem; color: var(--text3); font-size: 0.9rem; }
 
   /* ── ROSTER TABLE ── */
   table { width: 100%; border-collapse: collapse; }
-  th { padding: 1rem 1.5rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid var(--gray-200); }
-  td { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.95rem; }
+  th { padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text3); background: var(--surface2); border-bottom: 1px solid var(--border); }
+  td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: #faf9ff; }
 
-  .roster-name { font-weight: 600; color: var(--gray-900); margin-bottom: 2px; }
-  .roster-meta { font-size: 0.8rem; color: var(--gray-500); font-family: var(--font-mono); }
-  .time-box { font-family: var(--font-mono); font-size: 0.85rem; color: var(--gray-900); background: var(--gray-50); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--gray-200); display: inline-block; }
-  .time-box.empty { color: var(--gray-300); background: transparent; border-color: transparent; }
+  .roster-name { font-weight: 600; margin-bottom: 2px; }
+  .roster-meta { font-size: 0.75rem; color: var(--text3); }
+  .time-chip { font-family: var(--mono); font-size: 0.8rem; background: var(--bg); border: 1px solid var(--border2); padding: 2px 6px; border-radius: 4px; }
+  .time-chip.blank { color: var(--text3); background: transparent; border-color: transparent; }
 
-  .status-badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; }
-  .bg-pending { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200); }
-  .bg-in { background: var(--indigo-l); color: var(--indigo); border: 1px solid rgba(76,47,240,0.2); }
-  .bg-out { background: var(--emerald-l); color: var(--emerald); border: 1px solid rgba(5,150,105,0.2); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .badge-pending { background: var(--bg); border: 1px solid var(--border); color: var(--text3); }
+  .badge-in      { background: #dbeafe; color: var(--indigo-d); border: 1px solid #bfdbfe; }
+  .badge-out     { background: #d1fae5; color: var(--emerald); border: 1px solid #a7f3d0; }
 
-  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  /* ── ACTION BUTTONS ── */
+  .btn-view { padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border2); background: white; color: var(--text2); font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: 0.15s; }
+  .btn-view:hover { border-color: var(--indigo); color: var(--indigo); background: #eff6ff; }
 
-  /* ── ANALYTICS ROW ── */
-  .analytics-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; padding: 1.5rem; background: #faf9ff; border-top: 1px solid var(--gray-100); }
-  .metric { display: flex; flex-direction: column; }
-  .metric-val { font-size: 2rem; font-weight: 700; color: var(--indigo); font-family: var(--font-mono); line-height: 1; margin-bottom: 4px;}
-  .metric-lbl { font-size: 0.8rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; }
+  /* ── EXIT REQUEST PANEL ── */
+  .exit-panel { border-color: #fcd34d; }
+  .exit-header { background: #fffcf2; border-bottom: 1px solid #fde68a; }
+  .exit-card { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .exit-name { font-weight: 600; font-size: 0.9rem; }
+  .exit-reason { font-size: 0.85rem; color: var(--text2); margin-top: 2px; }
+  .exit-time { font-size: 0.75rem; color: var(--text3); margin-top: 4px; }
+  .exit-actions { display: flex; gap: 8px; }
 
-  /* ── MODAL ── */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(26,23,48,0.55); display: flex; align-items: flex-start; justify-content: center; z-index: 1000; overflow-y: auto; padding: 4rem 1rem; }
-  .modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 600px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: slideIn 0.2s ease; overflow: hidden; }
-  .modal-top { padding: 1.75rem 2rem; border-bottom: 1px solid var(--gray-200); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; background: #faf9ff; }
-  .modal-name { font-size: 1.3rem; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
-  .modal-meta { font-size: 0.85rem; color: var(--gray-500); font-family: var(--font-mono); }
-  .btn-dl { padding: 8px 16px; border-radius: var(--radius-sm); background: var(--indigo); color: white; border: none; font-family: var(--font-main); font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: background 0.15s; }
-  .btn-dl:hover { background: var(--indigo-d); }
-  .btn-close { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--gray-200); background: transparent; cursor: pointer; font-size: 1rem; color: var(--gray-700); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
-  .btn-close:hover { border-color: var(--red); color: var(--red); background: var(--red-l); }
-  .modal-body { padding: 2rem; }
+  .btn-approve, .btn-deny {
+    padding: 6px 12px; border-radius: 4px; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  }
+  .btn-approve { background: var(--emerald); color: white; }
+  .btn-approve:hover { background: #047857; }
+  .btn-deny { background: white; color: var(--text2); border: 1px solid var(--border2); }
+  .btn-deny:hover { background: #fee2e2; color: var(--red); border-color: #fca5a5; }
+
+  /* ── TOAST NOTIFICATIONS ── */
+  .toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+  .toast {
+    display: flex; align-items: flex-start; gap: 10px; padding: 1rem; border-radius: var(--r-sm);
+    background: white; border: 1px solid var(--border2); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    min-width: 250px; flex-direction: row;
+  }
+  .toast-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0.9rem; }
+  .toast.success .toast-icon { background: #d1fae5; color: var(--emerald); }
+  .toast.warning .toast-icon { background: #fef3c7; color: var(--amber); }
+  .toast.error .toast-icon { background: #fee2e2; color: var(--red); }
+  .toast.info .toast-icon { background: #dbeafe; color: var(--indigo); }
+  .toast-content { flex: 1; }
+  .toast-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+  .toast-msg { font-size: 0.8rem; color: var(--text2); }
+  .toast-close { background: none; border: none; color: var(--text3); cursor: pointer; padding: 2px; }
+
+  /* ── STUDENT MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(17,24,39,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 2rem;
+  }
+  .modal {
+    background: white; border-radius: var(--r); width: 100%; max-width: 500px; overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); display: flex; flex-direction: column;
+  }
+  .modal-top { padding: 1.5rem; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .modal-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--indigo); color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem; }
+  .modal-name { font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+  .modal-meta { font-size: 0.85rem; color: var(--text2); }
+  .modal-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .modal-body { padding: 1.5rem; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border2); border-radius: var(--r-sm); padding: 1rem; }
+  .stat-box-label { font-size: 0.75rem; color: var(--text3); font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
+  .stat-box-val { font-size: 1.1rem; font-weight: 600; color: var(--text); }
   
-  .btn-outline { padding: 6px 12px; border: 1px solid var(--gray-300); border-radius: var(--radius-sm); background: var(--surface); color: var(--gray-700); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
-  .btn-outline:hover { background: var(--gray-50); border-color: var(--gray-900); color: var(--gray-900); }
+  .btn-dl { padding: 6px 12px; background: var(--indigo); color: white; border: none; border-radius: 4px; font-weight: 500; cursor: pointer; }
+  .btn-dl:hover { background: var(--indigo-d); }
+  .btn-close { width: 30px; height: 30px; border-radius: 4px; background: white; color: var(--text2); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .btn-close:hover { background: #f3f4f6; }
 
   @media (max-width: 1024px) {
     .main-content { grid-template-columns: 1fr; }
     .login-wrap { grid-template-columns: 1fr; }
     .login-left { display: none; }
   }
+
+  /* ── TAB BAR ─────────────────────────────────────────────────────────── */
+  .tab-bar {
+    display: flex; gap: 0; padding: 0 2rem; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .tab-btn {
+    padding: 1rem 1.5rem; font-family: var(--font); font-size: 0.9rem; font-weight: 600; color: var(--text2);
+    background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--indigo); border-bottom-color: var(--indigo); }
+
+  /* ── ANALYTICS ──────────────────────────────────────────────────────── */
+  .analytics-page { padding: 2rem; max-width: 1200px; margin: 0 auto; width: 100%; }
+  .analytics-controls { display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 2rem; }
+  .date-group { display: flex; flex-direction: column; gap: 6px; }
+  .date-group label { font-size: 0.8rem; font-weight: 600; color: var(--text2); }
+  .date-input { padding: 0.5rem 0.75rem; border: 1px solid var(--border2); border-radius: var(--r-sm); font-size: 0.9rem; outline: none; }
+  .date-input:focus { border-color: var(--indigo); }
+  
+  .btn-refresh { padding: 0.5rem 1rem; background: var(--indigo); color: white; border: none; border-radius: var(--r-sm); font-weight: 600; cursor: pointer; }
+  .btn-refresh:hover { background: var(--indigo-d); }
+  .btn-refresh:disabled { opacity: 0.6; }
+  .toggle-btn { padding: 0.5rem 0.75rem; background: white; border: 1px solid var(--border2); color: var(--text2); border-radius: var(--r-sm); font-size: 0.85rem; cursor: pointer; }
+  .toggle-btn:hover { background: var(--bg); }
+
+  .student-analytics-card {
+    background: white; border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); overflow: hidden;
+  }
+  .sac-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; }
+  .sac-info { display: flex; align-items: center; gap: 12px; }
+  .sac-avatar { width: 40px; height: 40px; background: var(--bg); color: var(--text2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 600; border: 1px solid var(--border); }
+  .sac-name { font-weight: 600; font-size: 0.95rem; }
+  .sac-meta { font-size: 0.8rem; color: var(--text2); }
+  .sac-stats { display: flex; gap: 1.5rem; }
+  .sac-stat { text-align: right; }
+  .sac-stat-val { font-size: 1.2rem; font-weight: 700; }
+  .sac-stat-lbl { font-size: 0.7rem; color: var(--text3); text-transform: uppercase; }
+  .sac-bar-wrap { padding: 0 1.5rem 1rem; }
+  .sac-bar-track { height: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .sac-bar-fill { height: 100%; background: var(--indigo); border-radius: 4px; }
+  .sac-bar-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text2); margin-top: 4px; }
+  
+  .sac-records { border-top: 1px solid var(--border); }
+  .sac-record-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; padding: 0.5rem 1.5rem; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+  .sac-record-row:last-child { border-bottom: none; }
+  .sac-record-row.header { background: var(--surface2); font-weight: 600; font-size: 0.8rem; color: var(--text2); }
+  .pct-high { color: var(--emerald); font-weight: 600; }
+  .pct-mid  { color: var(--amber); font-weight: 600; }
+  .pct-low  { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
+<div class="ambient ambient-1"></div>
+<div class="ambient ambient-2"></div>
 <div id="root"></div>
 
 <script type="text/babel">
-// ─────────────────────────────────────────────
-// CONFIG
-// ─────────────────────────────────────────────
-const API_BASE = "http://192.168.10.40:8000";
+const { useState, useEffect, useCallback, useRef } = React;
 
-// ─────────────────────────────────────────────
-// API FETCHERS
-// ─────────────────────────────────────────────
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const API_BASE = "http://localhost:8000";
+const TOTAL_STUDENTS = 4;
 
+// ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
-  try {
-    const r = await fetch(`${API_BASE}/auth/login`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    if (!r.ok) throw new Error("Invalid credentials");
-    return await r.json();
-  } catch (err) {
-    throw new Error("Unable to reach server or invalid credentials.");
-  }
+  const r = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  if (!r.ok) throw new Error("Invalid credentials");
+  return r.json();
 }
-
 async function apiFetchStudents(token) {
   const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed to fetch students");
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+async function apiFetchLiveToday(token) {
+  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+async function apiFetchExitRequests(token) {
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+async function apiResolveExitRequest(token, requestId, action) {
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/${requestId}/resolve`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action })
+  });
+  if (!r.ok) throw new Error("Failed to resolve exit request");
   return await r.json();
 }
 
-async function apiFetchLiveToday(token) {
-  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed to fetch live attendance");
-  return await r.json(); // Returns [{id, student_id, name, roll, status: "IN"|"COMPLETED", time_in, time_out}]
+async function apiFetchAnalytics(token, fromDate, toDate) {
+  let url = `${API_BASE}/attendance/analytics/summary`;
+  const params = [];
+  if (fromDate) params.push(`from_date=${fromDate}`);
+  if (toDate)   params.push(`to_date=${toDate}`);
+  if (params.length) url += '?' + params.join('&');
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed to fetch analytics");
+  return await r.json();
 }
 
-// ─────────────────────────────────────────────
-// COMPONENTS
-// ─────────────────────────────────────────────
+// ─── ANIMATED COUNTER HOOK ────────────────────────────────────────────────────
+function useAnimatedCounter(target, duration = 700) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let start = null;
+    const initial = 0;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setVal(Math.round(initial + (target - initial) * eased));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target]);
+  return val;
+}
 
-function downloadStudentPDF(student, record) {
+// ─── TOAST SYSTEM ─────────────────────────────────────────────────────────────
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast ${t.type}`}>
+          <div className="toast-icon">
+            {t.type === 'success' && '✓'}
+            {t.type === 'warning' && '⚠'}
+            {t.type === 'error' && '✕'}
+            {t.type === 'info' && 'ℹ'}
+          </div>
+          <div className="toast-content">
+            <div className="toast-title">{t.title}</div>
+            <div className="toast-msg">{t.msg}</div>
+          </div>
+          <div className="toast-close" onClick={() => removeToast(t.id)}>×</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useToasts() {
+  const [toasts, setToasts] = useState([]);
+  const addToast = useCallback((type, title, msg) => {
+    const id = Date.now() + Math.random();
+    setToasts(p => [...p, { id, type, title, msg }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4500);
+  }, []);
+  const removeToast = useCallback((id) => setToasts(p => p.filter(t => t.id !== id)), []);
+  return { toasts, addToast, removeToast };
+}
+
+// ─── PDF DOWNLOAD ─────────────────────────────────────────────────────────────
+function downloadPDF(student, record) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-
-  // Branding Map
-  doc.setFillColor(76, 47, 240); // Indigo
-  doc.rect(0, 0, 210, 30, "F");
-  
+  doc.setFillColor(99, 102, 241);
+  doc.rect(0, 0, 210, 32, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16); doc.setFont(undefined, "bold");
-  doc.text("Smart Attendance Report", 14, 13);
-  
+  doc.text("Smart Attendance Report", 14, 14);
   doc.setFontSize(9); doc.setFont(undefined, "normal");
-  doc.text("Bharati Vidyapeeth College of Engineering, Pune", 14, 21);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 110, 21);
-
-  // Student Info
-  doc.setTextColor(26, 23, 48);
+  doc.text("Bharati Vidyapeeth College of Engineering, Pune", 14, 22);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 120, 22);
+  doc.setTextColor(20, 21, 36);
   doc.setFontSize(14); doc.setFont(undefined, "bold");
-  doc.text(student.name, 14, 45);
-  
-  doc.setFontSize(10); doc.setFont(undefined, "normal");
-  doc.setTextColor(100, 100, 130);
-  doc.text(`Roll No: ${student.roll}`, 14, 52);
-  doc.text(`Email: ${student.email}`, 14, 58);
-  doc.text(`Division: ${student.division}`, 14, 64);
-  
-  // Table Box
-  doc.setFillColor(248,247,255); 
-  doc.rect(14, 80, 182, 10, "F");
-  doc.setFontSize(8); doc.setFont(undefined, "bold"); doc.setTextColor(120,115,160);
-  doc.text("DATE", 18, 86.5);
-  doc.text("STATUS", 60, 86.5);
-  doc.text("CHECK IN", 110, 86.5);
-  doc.text("CHECK OUT", 155, 86.5);
-
+  doc.text(student.name, 14, 50);
+  doc.setFontSize(10); doc.setFont(undefined, "normal"); doc.setTextColor(100, 100, 140);
+  doc.text(`Roll No: ${student.roll}`, 14, 58);
+  doc.text(`Email: ${student.email}`, 14, 64);
+  doc.text(`Division: ${student.division}`, 14, 70);
+  doc.setFillColor(240, 240, 255);
+  doc.rect(14, 84, 182, 10, "F");
+  doc.setFontSize(8); doc.setFont(undefined, "bold"); doc.setTextColor(100, 100, 140);
+  doc.text("DATE", 18, 90); doc.text("STATUS", 60, 90);
+  doc.text("CHECK IN", 110, 90); doc.text("CHECK OUT", 155, 90);
   const status = record ? record.status : "ABSENT";
-  const timeIn = record?.time_in || "—";
-  const timeOut = record?.time_out || "—";
-  const todayDate = new Date().toISOString().split("T")[0];
-
-  doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(26,23,48);
-  doc.text(todayDate, 18, 98);
-  
-  if (status === "COMPLETED") doc.setTextColor(5,150,105);
-  else if (status === "IN") doc.setTextColor(76,47,240);
-  else doc.setTextColor(220,38,38);
-  
-  doc.setFont(undefined, "bold");
-  doc.text(status, 60, 98);
-  
-  doc.setFont(undefined, "normal"); doc.setTextColor(100,100,130);
-  doc.text(timeIn, 110, 98);
-  doc.text(timeOut, 155, 98);
-
-  // Sign off
-  doc.setFontSize(8); doc.setTextColor(150, 150, 170);
-  doc.text("_________________________", 140, 160);
-  doc.text("Authorized Faculty Signature", 143, 165);
-
-  doc.save(`Attendance_${student.roll}_${todayDate}.pdf`);
+  const today = new Date().toISOString().split("T")[0];
+  doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(20, 21, 36);
+  doc.text(today, 18, 103);
+  if (status === "COMPLETED") doc.setTextColor(16, 185, 129);
+  else if (status === "IN") doc.setTextColor(99, 102, 241);
+  else doc.setTextColor(239, 68, 68);
+  doc.setFont(undefined, "bold"); doc.text(status, 60, 103);
+  doc.setFont(undefined, "normal"); doc.setTextColor(100, 100, 140);
+  doc.text(record?.time_in || "—", 110, 103);
+  doc.text(record?.time_out || "—", 155, 103);
+  doc.setFontSize(8); doc.setTextColor(160, 160, 180);
+  doc.text("_________________________", 130, 170);
+  doc.text("Authorized Faculty Signature", 133, 176);
+  doc.save(`Attendance_${student.roll}_${today}.pdf`);
 }
 
-function StudentModal({ student, record, onClose }) {
-  const status = record ? record.status : "ABSENT";
-  const badgeClass = status === "COMPLETED" ? "bg-out" : status === "IN" ? "bg-in" : "bg-pending";
-
+// ─── STUDENT MODAL ────────────────────────────────────────────────────────────
+function StudentModal({ s, rec, onClose }) {
+  const status = rec ? rec.status : "ABSENT";
+  const initials = s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-top">
-          <div>
-            <div className="modal-name">{student.name}</div>
-            <div className="modal-meta">{student.roll} · Div {student.division}</div>
-          </div>
-          <button className="btn-close" onClick={onClose}>✕</button>
-        </div>
-        
-        <div className="modal-body">
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"2rem"}}>
+          <div className="modal-avatar">{initials}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
-              <div style={{fontSize:"0.75rem", color:"var(--gray-500)", fontWeight:"600", marginBottom:"4px"}}>TODAY'S STATUS</div>
-              <span className={`status-badge ${badgeClass}`}>{status}</span>
+              <div className="modal-name">{s.name}</div>
+              <div className="modal-meta">{s.roll} · Div {s.division}</div>
             </div>
-            <button className="btn-dl" onClick={()=>downloadStudentPDF(student, record)}>↓ Download PDF</button>
+            <button className="btn-close" onClick={onClose}>✕</button>
           </div>
-          
-          <div style={{background:"var(--gray-50)", padding:"1.5rem", borderRadius:"12px", border:"1px solid var(--gray-200)"}}>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem"}}>
-              <div>
-                <div style={{fontSize:"0.7rem", color:"var(--gray-500)", fontWeight:"700", textTransform:"uppercase", marginBottom:"4px"}}>Time In</div>
-                <div style={{fontSize:"1.1rem", fontFamily:"var(--font-mono)", fontWeight:"600", color:"var(--gray-900)"}}>{record?.time_in || "—"}</div>
-              </div>
-              <div>
-                <div style={{fontSize:"0.7rem", color:"var(--gray-500)", fontWeight:"700", textTransform:"uppercase", marginBottom:"4px"}}>Time Out</div>
-                <div style={{fontSize:"1.1rem", fontFamily:"var(--font-mono)", fontWeight:"600", color:"var(--gray-900)"}}>{record?.time_out || "—"}</div>
-              </div>
+          <div className="modal-actions">
+            <button className="btn-dl" onClick={() => downloadPDF(s, rec)}>↓ Download PDF Report</button>
+            <span className={`badge ${status === 'COMPLETED' ? 'badge-out' : status === 'IN' ? 'badge-in' : 'badge-pending'}`}>
+              <span className="badge-dot" />
+              {status === 'IN' ? 'ACTIVE ON CAMPUS' : status === 'COMPLETED' ? 'DEPARTED' : 'NO RECORD'}
+            </span>
+          </div>
+        </div>
+        <div className="modal-body">
+          <div className="stat-grid">
+            <div className="stat-box">
+              <div className="stat-box-label">Check-In Time</div>
+              <div className="stat-box-val" style={{ color: 'var(--indigo)' }}>{rec?.time_in || "—"}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-box-label">Check-Out Time</div>
+              <div className="stat-box-val" style={{ color: 'var(--emerald)' }}>{rec?.time_out || "—"}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-box-label">Date</div>
+              <div className="stat-box-val">{new Date().toLocaleDateString("en-IN")}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-box-label">Student ID</div>
+              <div className="stat-box-val" style={{ fontSize: "0.85rem" }}>{s.id?.slice(0,12)}…</div>
             </div>
           </div>
         </div>
@@ -352,43 +523,40 @@ function StudentModal({ student, record, onClose }) {
   );
 }
 
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin }) {
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    setError(""); setLoading(true);
-    try {
-      const data = await apiLogin(email, password);
-      onLogin(data);
-    } catch(err) {
-      setError(err.message);
-    } finally { setLoading(false); }
+    e.preventDefault(); setError(""); setLoading(true);
+    try { onLogin(await apiLogin(email, password)); }
+    catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="login-wrap">
       <div className="login-left">
-        <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="BVCOE Logo" className="brand-logo-img" />
+        <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="BVCOE" className="brand-logo-img" />
         <h1>Smart Attendance</h1>
-        <p>Real-time campus check-in and check-out monitoring system for Bharati Vidyapeeth College of Engineering.</p>
+        <p>Real-time campus monitoring system for Bharati Vidyapeeth College of Engineering, Pune.</p>
       </div>
       <div className="login-right">
         <div className="login-card">
           <h2>Admin Login</h2>
           <p className="sub">Access the live monitoring dashboard</p>
-          {error && <div className="err-msg">{error}</div>}
+          {error && <div className="err-msg">⚠ {error}</div>}
           <form onSubmit={handleSubmit}>
-            <div>
+            <div className="input-wrap">
               <label>Administrator Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@bvucoep.edu.in" required />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@bvucoep.edu.in" required />
             </div>
-            <div>
+            <div className="input-wrap">
               <label>Password</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
             <button type="submit" className="btn-primary" disabled={loading}>
               {loading ? "Authenticating…" : "Access Dashboard →"}
@@ -400,150 +568,259 @@ function LoginPage({ onLogin }) {
   );
 }
 
-
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function Dashboard({ session, onLogout }) {
-  const [students, setStudents] = React.useState([]);
-  const [records, setRecords] = React.useState([]); // Today's live records
-  const [loading, setLoading] = React.useState(true);
-  const [lastSync, setLastSync] = React.useState(new Date());
-  const [selectedStudent, setSelectedStudent] = React.useState(null);
+  const [students, setStudents] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [exitRequests, setExitRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSync, setLastSync] = useState(new Date());
+  const [selected, setSelected] = useState(null);
+  const [resolving, setResolving] = useState({});
+  const [activeTab, setActiveTab] = useState('live');   // 'live' | 'analytics'
+  const [analyticsData, setAnalyticsData] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate,   setToDate  ] = useState('');
+  const [expandedStudent, setExpandedStudent] = useState(null);
+  const prevExitCount = useRef(0);
+  const { toasts, addToast, removeToast } = useToasts();
 
-  const loadData = React.useCallback(async () => {
+  const loadAnalytics = async () => {
+    setAnalyticsLoading(true);
     try {
-      // Fetch roster
-      if(students.length === 0) {
+      const data = await apiFetchAnalytics(session.token, fromDate, toDate);
+      setAnalyticsData(data);
+    } catch { addToast('error', 'Analytics Error', 'Could not load analytics data.'); }
+    finally { setAnalyticsLoading(false); }
+  };
+
+  useEffect(() => { if (activeTab === 'analytics') loadAnalytics(); }, [activeTab]);
+
+  const totalIn = records.length;
+  const active = records.filter(r => r.status === 'IN').length;
+  const departed = records.filter(r => r.status === 'COMPLETED').length;
+
+  const cntTotal = useAnimatedCounter(totalIn);
+  const cntActive = useAnimatedCounter(active);
+  const cntDeparted = useAnimatedCounter(departed);
+
+  const occupancyPct = TOTAL_STUDENTS > 0 ? (active / TOTAL_STUDENTS) * 100 : 0;
+
+  const loadData = useCallback(async () => {
+    try {
+      if (students.length === 0) {
         const stds = await apiFetchStudents(session.token);
         setStudents(stds);
       }
-      // Fetch live today's feed
-      const recs = await apiFetchLiveToday(session.token);
+      const [recs, exits] = await Promise.all([
+        apiFetchLiveToday(session.token),
+        apiFetchExitRequests(session.token)
+      ]);
       setRecords(recs);
+
+      // Toast if new exit request arrived
+      if (exits.length > prevExitCount.current && prevExitCount.current >= 0) {
+        const newReq = exits[0];
+        if (newReq) addToast("warning", "Exit Request", `${newReq.name} (${newReq.roll}) — ${newReq.reason}`);
+      }
+      prevExitCount.current = exits.length;
+      setExitRequests(exits);
       setLastSync(new Date());
+      setIsOnline(true);
       setLoading(false);
-    } catch(e) {
-      console.error(e);
+    } catch (e) {
+      setIsOnline(false);
       setLoading(false);
     }
-  }, [session.token, students.length]);
+  }, [session.token, students.length, addToast]);
 
-  React.useEffect(() => { loadData(); }, [loadData]);
-  React.useEffect(() => {
-    const t = setInterval(loadData, 5000); // Aggressive 5-second polling for real-time feel
+  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const t = setInterval(loadData, 5000);
     return () => clearInterval(t);
   }, [loadData]);
 
-  // Transform records into a chronological feed of distinct events (Check-ins and Check-outs)
   const feedEvents = [];
   records.forEach(r => {
-    if(r.time_in) feedEvents.push({ type: 'IN', time: r.time_in, name: r.name, roll: r.roll });
-    if(r.time_out) feedEvents.push({ type: 'OUT', time: r.time_out, name: r.name, roll: r.roll });
+    if (r.time_in)  feedEvents.push({ type: 'in',  time: r.time_in,  name: r.name, roll: r.roll });
+    if (r.time_out) feedEvents.push({ type: 'out', time: r.time_out, name: r.name, roll: r.roll });
   });
-  
-  // Sort descending by time (simple locale string comparison works if zero-padded or AM/PM parsed, but let's just reverse assumption as they usually arrive in order, or we can sort)
-  // For safety, let's reverse the feed to show newest first, assuming records are returned ordered and out comes after in.
   feedEvents.reverse();
 
-  // Metrics
-  const totalIn = records.length;
-  const currentlyActive = records.filter(r => r.status === 'IN').length;
-  const completed = records.filter(r => r.status === 'COMPLETED').length;
+  async function handleResolve(reqId, action, name) {
+    setResolving(p => ({ ...p, [reqId]: action }));
+    try {
+      await apiResolveExitRequest(session.token, reqId, action);
+      addToast(action === 'APPROVE' ? 'success' : 'error', action === 'APPROVE' ? 'Exit Approved' : 'Exit Denied', `${name}'s request has been ${action === 'APPROVE' ? 'approved' : 'denied'}.`);
+      await loadData();
+    } catch {
+      addToast('error', 'Error', 'Could not resolve the request. Try again.');
+    } finally {
+      setResolving(p => { const n = { ...p }; delete n[reqId]; return n; });
+    }
+  }
 
   return (
     <div className="app-shell">
       <div className="topbar">
         <div className="topbar-brand">
           <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="Logo" />
-          KIWI
+          <span>Smart Attendance</span>
         </div>
         <div className="topbar-sep" />
-        <div className="topbar-title">Live Campus Analytics</div>
+        <div className="topbar-title">BVCOE Campus Dashboard</div>
         <div className="topbar-right">
-          <div className="live-indicator">LIVE FEED</div>
-          <div className="user-chip">{session.name}</div>
+          <div className={`live-beacon ${isOnline ? 'live' : 'offline'}`}>
+            <div className="beacon-dot" />
+            {isOnline ? 'Live' : 'Offline'}
+          </div>
+          <div className="user-chip">
+            <div className="avatar">AD</div>
+            <span style={{ fontSize: "0.8rem" }}>{session.email || "Admin"}</span>
+          </div>
           <button className="btn-logout" onClick={onLogout}>Sign out</button>
         </div>
       </div>
 
-      <div className="main-content">
-        
-        {/* LEFT: LIVE FEED */}
-        <div className="panel" style={{ maxHeight: 'calc(100vh - 120px)' }}>
-          <div className="panel-header">
-            <div className="panel-title">Activity Feed</div>
-            <div className="panel-meta">Today</div>
-          </div>
-          <div className="feed-list">
-            {feedEvents.length === 0 && (
-              <div className="empty-feed">
-                <div style={{fontSize:"2rem", marginBottom:"1rem"}}>📭</div>
-                No scans recorded yet today.<br/>Waiting for activity...
+      {/* Tab Bar */}
+      <div className="tab-bar">
+        <button className={`tab-btn ${activeTab==='live'?'active':''}`} onClick={()=>setActiveTab('live')}>
+          <span className="tab-icon">📡</span> Live Dashboard
+        </button>
+        <button className={`tab-btn ${activeTab==='analytics'?'active':''}`} onClick={()=>setActiveTab('analytics')}>
+          <span className="tab-icon">📊</span> Analytics
+        </button>
+      </div>
+
+      {activeTab === 'live' && <div className="main-content">
+        {/* ── LEFT COLUMN: ACTIVITY FEED ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <div className="panel" style={{ maxHeight: "calc(100vh - 120px)", flex: 1 }}>
+            <div className="panel-header">
+              <div className="panel-title">Activity Feed</div>
+              <div className="panel-meta">{lastSync.toLocaleTimeString()}</div>
+            </div>
+
+            {/* Occupancy Bar */}
+            <div className="occupancy-wrap">
+              <div className="occupancy-label">
+                <span>Campus Occupancy</span>
+                <span>{active} / {TOTAL_STUDENTS} students</span>
               </div>
-            )}
-            {feedEvents.map((ev, i) => (
-              <div key={i} className={`feed-item ${ev.type.toLowerCase()}`}>
-                <span className="feed-time">{ev.time}</span>
-                <div className="feed-name">{ev.name}</div>
-                <div style={{fontSize:"0.75rem", color:"var(--gray-500)", marginTop:"2px"}}>{ev.roll}</div>
-                <span className={`feed-action ${ev.type.toLowerCase()}`}>
-                  {ev.type === 'IN' ? 'Checked In' : 'Checked Out'}
-                </span>
+              <div className="occupancy-track">
+                <div className="occupancy-fill" style={{ width: `${occupancyPct}%` }} />
               </div>
-            ))}
+            </div>
+
+            <div className="feed-list">
+              {feedEvents.length === 0 ? (
+                <div className="empty-feed">
+                  <div className="radar"><span style={{ position: "relative", zIndex: 1, color: "var(--text3)", fontSize: "1.2rem" }}>📡</span></div>
+                  <span style={{ fontSize: "0.85rem" }}>Waiting for activity…</span>
+                  <span style={{ fontSize: "0.75rem" }}>No scans recorded today</span>
+                </div>
+              ) : (
+                feedEvents.map((ev, i) => (
+                  <div key={i} className={`feed-item ${ev.type}`} style={{ animationDelay: `${i * 40}ms` }}>
+                    <span className="feed-time">{ev.time}</span>
+                    <div className="feed-name">{ev.name}</div>
+                    <div className="feed-sub">{ev.roll}</div>
+                    <span className={`feed-pill ${ev.type}`}>
+                      {ev.type === 'in' ? '↑ Checked In' : '↓ Checked Out'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: ROSTER & ANALYTICS */}
-        <div style={{display:"flex", flexDirection:"column", gap:"2rem"}}>
-          
+        {/* ── RIGHT COLUMN: EXIT REQUESTS + ROSTER + METRICS ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
+          {/* Exit Requests Panel */}
+          {exitRequests.length > 0 && (
+            <div className="panel exit-panel">
+              <div className="panel-header exit-header">
+                <div className="panel-title" style={{ color: "var(--amber)", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ animation: "beaconPulse 1.2s infinite", display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--amber)" }} />
+                  Pending Exit Requests
+                </div>
+                <div className="panel-meta" style={{ background: "rgba(245,158,11,0.15)", color: "var(--amber)", padding: "2px 10px", borderRadius: "20px", fontWeight: 700 }}>
+                  {exitRequests.length} pending
+                </div>
+              </div>
+              <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {exitRequests.map(er => (
+                  <div className="exit-card" key={er.request_id}>
+                    <div>
+                      <div className="exit-name">{er.name} <span style={{ color: "var(--text3)", fontWeight: 400, fontSize: "0.8rem" }}>({er.roll})</span></div>
+                      <div className="exit-reason">📍 {er.reason}</div>
+                      <div className="exit-time">Requested at {er.time}</div>
+                    </div>
+                    <div className="exit-actions">
+                      <button className="btn-approve" disabled={!!resolving[er.request_id]}
+                        onClick={() => handleResolve(er.request_id, 'APPROVE', er.name)}>
+                        {resolving[er.request_id] === 'APPROVE' ? <span className="spin">◌</span> : '✓ Approve'}
+                      </button>
+                      <button className="btn-deny" disabled={!!resolving[er.request_id]}
+                        onClick={() => handleResolve(er.request_id, 'DENY', er.name)}>
+                        {resolving[er.request_id] === 'DENY' ? <span className="spin">◌</span> : '✕ Deny'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Roster */}
           <div className="panel">
             <div className="panel-header">
               <div className="panel-title">Daily Roster</div>
-              <div className="panel-meta">Last sync: {lastSync.toLocaleTimeString()}</div>
+              <div className="panel-meta">Auto-refreshing · 5s</div>
             </div>
-            
             {loading && students.length === 0 ? (
-              <div style={{padding:"3rem", textAlign:"center", color:"var(--gray-500)"}}>Loading roster...</div>
+              <div style={{ padding: "3rem", textAlign: "center", color: "var(--text3)" }}>Loading roster…</div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>Student Details</th>
+                    <th>Student</th>
                     <th>Status</th>
-                    <th>Time In</th>
-                    <th>Time Out</th>
-                    <th>Action</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Report</th>
                   </tr>
                 </thead>
                 <tbody>
                   {students.map(s => {
                     const rec = records.find(r => r.student_id === s.id);
-                    const status = !rec ? 'PENDING' : rec.status; // PENDING, IN, COMPLETED
-                    
+                    const status = !rec ? 'PENDING' : rec.status;
+                    const initials = s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
                     return (
                       <tr key={s.id}>
                         <td>
-                          <div className="roster-name">{s.name}</div>
-                          <div className="roster-meta">{s.roll} · Div {s.division}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg, var(--indigo), #818cf8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+                            <div>
+                              <div className="roster-name">{s.name}</div>
+                              <div className="roster-meta">{s.roll} · Div {s.division}</div>
+                            </div>
+                          </div>
                         </td>
                         <td>
-                          {status === 'PENDING' && <span className="status-badge bg-pending">PENDING</span>}
-                          {status === 'IN' && <span className="status-badge bg-in">ACTIVE (IN)</span>}
-                          {status === 'COMPLETED' && <span className="status-badge bg-out">COMPLETED</span>}
-                        </td>
-                        <td>
-                          <span className={`time-box ${!rec?.time_in ? 'empty' : ''}`}>
-                            {rec?.time_in || '--:--'}
+                          <span className={`badge ${status === 'PENDING' ? 'badge-pending' : status === 'IN' ? 'badge-in' : 'badge-out'}`}>
+                            <span className="badge-dot" />
+                            {status === 'PENDING' ? 'Pending' : status === 'IN' ? 'On Campus' : 'Departed'}
                           </span>
                         </td>
+                        <td><span className={`time-chip ${!rec?.time_in ? 'blank' : ''}`}>{rec?.time_in || '--:--'}</span></td>
+                        <td><span className={`time-chip ${!rec?.time_out ? 'blank' : ''}`}>{rec?.time_out || '--:--'}</span></td>
                         <td>
-                          <span className={`time-box ${!rec?.time_out ? 'empty' : ''}`}>
-                            {rec?.time_out || '--:--'}
-                          </span>
-                        </td>
-                        <td>
-                          <button className="btn-outline" onClick={()=>setSelectedStudent({student: s, record: rec})}>
-                            View Data
-                          </button>
+                          <button className="btn-view" onClick={() => setSelected({ s, rec })}>View</button>
                         </td>
                       </tr>
                     );
@@ -552,59 +829,144 @@ function Dashboard({ session, onLogout }) {
               </table>
             )}
 
-            <div className="analytics-row">
-              <div className="metric">
-                <span className="metric-val">{totalIn}</span>
-                <span className="metric-lbl">Total Scanned In</span>
+            {/* Metrics */}
+            <div className="metrics-row">
+              <div className="metric-cell">
+                <div className="metric-val">{cntTotal}</div>
+                <div className="metric-lbl">Total Scanned</div>
               </div>
-              <div className="metric">
-                <span className="metric-val">{currentlyActive}</span>
-                <span className="metric-lbl">Currently On Campus</span>
+              <div className="metric-cell">
+                <div className="metric-val">{cntActive}</div>
+                <div className="metric-lbl">On Campus</div>
               </div>
-              <div className="metric">
-                <span className="metric-val">{completed}</span>
-                <span className="metric-lbl">Departures</span>
+              <div className="metric-cell">
+                <div className="metric-val">{cntDeparted}</div>
+                <div className="metric-lbl">Departed</div>
               </div>
             </div>
           </div>
-          
         </div>
+      </div>}
 
-      </div>
+      {/* ── ANALYTICS TAB ───────────────────────────────────────────────── */}
+      {activeTab === 'analytics' && (
+        <div className="analytics-page">
+          {/* Controls */}
+          <div className="analytics-controls">
+            <div className="date-group">
+              <label>From Date</label>
+              <input type="date" className="date-input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+            </div>
+            <div className="date-group">
+              <label>To Date</label>
+              <input type="date" className="date-input" value={toDate} onChange={e => setToDate(e.target.value)} />
+            </div>
+            <button className="btn-refresh" onClick={loadAnalytics} disabled={analyticsLoading}>
+              {analyticsLoading ? 'Loading…' : '↺ Refresh'}
+            </button>
+            {(fromDate || toDate) && (
+              <button className="toggle-btn" onClick={() => { setFromDate(''); setToDate(''); }}>Clear Filter</button>
+            )}
+          </div>
 
-      {selectedStudent && (
-        <StudentModal 
-          student={selectedStudent.student} 
-          record={selectedStudent.record} 
-          onClose={()=>setSelectedStudent(null)} 
-        />
+          {analyticsLoading && (
+            <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text3)' }}>Loading analytics…</div>
+          )}
+
+          {!analyticsLoading && analyticsData.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text3)' }}>
+              No data available. Try adjusting the date range.
+            </div>
+          )}
+
+          {!analyticsLoading && analyticsData.map((s, i) => {
+            const pct = s.attendance_pct;
+            const barColor = pct >= 75 ? 'var(--emerald)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
+            const pctClass = pct >= 75 ? 'pct-high' : pct >= 50 ? 'pct-mid' : 'pct-low';
+            const initials = s.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+            const isExpanded = expandedStudent === s.id;
+
+            return (
+              <div className="student-analytics-card" key={s.id} style={{ animationDelay: `${i * 60}ms` }}>
+                <div className="sac-header">
+                  <div className="sac-info">
+                    <div className="sac-avatar">{initials}</div>
+                    <div>
+                      <div className="sac-name">{s.name}</div>
+                      <div className="sac-meta">{s.roll} · Div {s.division} · {s.email}</div>
+                    </div>
+                  </div>
+                  <div className="sac-stats">
+                    <div className="sac-stat">
+                      <div className={`sac-stat-val ${pctClass}`}>{pct}%</div>
+                      <div className="sac-stat-lbl">Attendance</div>
+                    </div>
+                    <div className="sac-stat">
+                      <div className="sac-stat-val" style={{ color: 'var(--indigo)' }}>{s.present_days}</div>
+                      <div className="sac-stat-lbl">Present</div>
+                    </div>
+                    <div className="sac-stat">
+                      <div className="sac-stat-val" style={{ color: 'var(--text2)' }}>{s.total_days}</div>
+                      <div className="sac-stat-lbl">Total Days</div>
+                    </div>
+                    <button className="toggle-btn" onClick={() => setExpandedStudent(isExpanded ? null : s.id)}>
+                      {isExpanded ? 'Hide Records ▲' : 'View Records ▼'}
+                    </button>
+                    <button className="btn-dl" onClick={() => downloadPDF(s, null)} style={{ padding: '5px 12px', fontSize: '0.75rem' }}>↓ PDF</button>
+                  </div>
+                </div>
+
+                {/* CSS Bar Chart */}
+                <div className="sac-bar-wrap">
+                  <div className="sac-bar-track">
+                    <div className="sac-bar-fill" style={{ width: `${pct}%`, background: barColor }} />
+                  </div>
+                  <div className="sac-bar-label">
+                    <span>{s.present_days} days present</span>
+                    <span>Last seen: {s.last_seen || '—'}</span>
+                  </div>
+                </div>
+
+                {/* Expandable Records */}
+                {isExpanded && s.records && s.records.length > 0 && (
+                  <div className="sac-records">
+                    <div className="sac-record-row header">
+                      <span>Date</span><span>Status</span><span>Check In</span><span>Check Out</span>
+                    </div>
+                    {s.records.map((r, ri) => (
+                      <div className="sac-record-row" key={ri}>
+                        <span style={{ fontFamily: 'var(--mono)' }}>{r.date}</span>
+                        <span style={{ color: r.status === 'COMPLETED' ? 'var(--emerald)' : r.status === 'IN' ? 'var(--indigo)' : 'var(--red)', fontWeight: 600 }}>{r.status}</span>
+                        <span style={{ fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{r.time_in}</span>
+                        <span style={{ fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{r.time_out}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
+
+      {selected && <StudentModal s={selected.s} rec={selected.rec} onClose={() => setSelected(null)} />}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
 
-// ── App Container ──
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
 function App() {
-  const [session, setSession] = React.useState(() => {
+  const [session, setSession] = useState(() => {
     try { const s = sessionStorage.getItem("kiwi_live_session"); return s ? JSON.parse(s) : null; }
     catch { return null; }
   });
-
-  const handleLogin = (data) => {
-    setSession(data);
-    sessionStorage.setItem("kiwi_live_session", JSON.stringify(data));
-  };
-
-  const handleLogout = () => {
-    setSession(null);
-    sessionStorage.removeItem("kiwi_live_session");
-  };
-
-  return session ? <Dashboard session={session} onLogout={handleLogout} /> : <LoginPage onLogin={handleLogin} />;
+  return session
+    ? <Dashboard session={session} onLogout={() => { setSession(null); sessionStorage.removeItem("kiwi_live_session"); }} />
+    : <LoginPage onLogin={data => { setSession(data); sessionStorage.setItem("kiwi_live_session", JSON.stringify(data)); }} />;
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>

@@ -23,10 +23,13 @@ import androidx.compose.ui.unit.sp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.smartattendance.smartattendance.data.local.SessionManager
+import com.smartattendance.smartattendance.data.remote.ExitRequestDto
 import com.smartattendance.smartattendance.data.repository.AttendanceRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.Color
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,12 +53,27 @@ fun AdminHomeScreen(
 
     var adminName by remember { mutableStateOf("...") }
     var activityLog by remember { mutableStateOf<List<ActivityLogItem>>(emptyList()) }
+    var pendingRequests by remember { mutableStateOf<List<ExitRequestDto>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect("fetchAdmin") {
         adminName = withContext(Dispatchers.IO) {
             SessionManager(context).getUserName() ?: "Admin"
         }
     }
+
+    LaunchedEffect("pollExitRequests") {
+        val repo = AttendanceRepository(context)
+        while(true) {
+            try {
+                val reqs = repo.getPendingExitRequests().getOrNull()
+                if (reqs != null) {
+                    pendingRequests = reqs
+                }
+            } catch (e: Exception) {}
+            delay(5000)
+        }
+    }
+
 
     val barcodeLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
@@ -197,53 +215,61 @@ fun AdminHomeScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            if (activityLog.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(72.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Filled.QrCodeScanner,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(36.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "No scans yet",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        )
+            LazyColumn(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (pendingRequests.isNotEmpty()) {
+                    item {
+                        Text("Pending Exit Requests", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Tap the Scan QR button to mark attendance",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    }
+                    items(pendingRequests) { req ->
+                        ExitRequestCard(
+                            req = req,
+                            onResolve = { action ->
+                                scope.launch {
+                                    try {
+                                        val reqId = (req.request_id ?: req.id ?: 0).toString()
+                                        AttendanceRepository(context).resolveExitRequest(reqId, action)
+                                        pendingRequests = pendingRequests.filter {
+                                            (it.request_id ?: it.id) != (req.request_id ?: req.id)
+                                        }
+                                    } catch (e: Exception) {}
+                                }
+                            }
                         )
                     }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+
+                if (activityLog.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(72.dp)) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                Text("No scans yet", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
+                                Spacer(Modifier.height(4.dp))
+                                Text("Tap the Scan QR button to mark attendance", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        Text("Recent Check-Ins", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+                        Spacer(Modifier.height(4.dp))
+                    }
                     items(activityLog) { item -> KiwiActivityCard(item) }
-                    item { Spacer(Modifier.height(80.dp)) }
                 }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
     }
@@ -312,3 +338,43 @@ fun KiwiActivityCard(item: ActivityLogItem) {
 
 fun formatTimestamp(millis: Long): String =
     SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
+
+
+@Composable
+fun ExitRequestCard(
+    req: com.smartattendance.smartattendance.data.remote.ExitRequestDto,
+    onResolve: (String) -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(req.name ?: "Unknown", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(req.time ?: "", style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            }
+            Text("Roll: ${req.roll}", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            Spacer(Modifier.height(6.dp))
+            Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(8.dp)) {
+                Text(
+                    req.reason,
+                    style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFFB45309)),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { onResolve("DENY") }) {
+                    Text("Deny", color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { onResolve("APPROVE") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
+                    Text("Approve", color = Color.White)
+                }
+            }
+        }
+    }
+}
