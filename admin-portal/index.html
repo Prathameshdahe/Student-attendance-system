@@ -334,9 +334,7 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const API_BASE = window.location.hostname
-  ? `http://${window.location.hostname}:8000`
-  : "http://192.168.10.40:8000";
+const API_BASE = "https://fabulous-gratitude-production-5eb1.up.railway.app";
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {

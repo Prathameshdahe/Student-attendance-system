@@ -5,8 +5,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object ApiClient {
-    // Secure tunnel routed directly to your local backend on the laptop over any Mobile Network
-    private const val BASE_URL = "https://rich-grapes-film.loca.lt/"
+    // Permanent Cloud Production Backend
+    private const val BASE_URL = "https://fabulous-gratitude-production-5eb1.up.railway.app/"
 
     private val httpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
