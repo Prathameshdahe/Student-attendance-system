@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.smartattendance.smartattendance.data.remote.ExitRequestDto
+import com.smartattendance.smartattendance.data.remote.GeofenceEventDto
 import com.smartattendance.smartattendance.data.remote.HistoryRecord
 import com.smartattendance.smartattendance.data.repository.AttendanceRepository
 import kotlinx.coroutines.Dispatchers
@@ -42,8 +44,11 @@ private val Gray900     = Color(0xFF111827)
 @Composable
 fun AttendanceHistoryScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val repo = remember(context) { AttendanceRepository(context) }
 
     var records  by remember { mutableStateOf<List<HistoryRecord>>(emptyList()) }
+    var requestHistory by remember { mutableStateOf<List<ExitRequestDto>>(emptyList()) }
+    var geofenceHistory by remember { mutableStateOf<List<GeofenceEventDto>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var error    by remember { mutableStateOf<String?>(null) }
 
@@ -53,11 +58,14 @@ fun AttendanceHistoryScreen(onBack: () -> Unit) {
     val pct = if (totalDays > 0) (completedDays * 100f / totalDays).toInt() else 0
 
     LaunchedEffect(Unit) {
-        val result = withContext(Dispatchers.IO) {
-            AttendanceRepository(context).getMyHistory()
-        }
-        result.onSuccess { records = it }
-              .onFailure { error = it.message }
+        val attendanceResult = withContext(Dispatchers.IO) { repo.getMyHistory() }
+        val requestResult = withContext(Dispatchers.IO) { repo.getMyExitRequests() }
+        val geofenceResult = withContext(Dispatchers.IO) { repo.getMyGeofenceEvents() }
+
+        attendanceResult.onSuccess { records = it }
+            .onFailure { error = it.message }
+        requestResult.onSuccess { requestHistory = it }
+        geofenceResult.onSuccess { geofenceHistory = it }
         isLoading = false
     }
 
@@ -66,8 +74,8 @@ fun AttendanceHistoryScreen(onBack: () -> Unit) {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Attendance History", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Text("Your personal record", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+                        Text("Activity History", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                        Text("Attendance, requests, and geofence activity", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
                     }
                 },
                 navigationIcon = {
@@ -184,7 +192,7 @@ fun AttendanceHistoryScreen(onBack: () -> Unit) {
                     }
                 }
 
-                records.isEmpty() -> {
+                records.isEmpty() && requestHistory.isEmpty() && geofenceHistory.isEmpty() -> {
                     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Surface(shape = CircleShape, color = IndigoLight, modifier = Modifier.size(80.dp)) {
@@ -204,7 +212,7 @@ fun AttendanceHistoryScreen(onBack: () -> Unit) {
 
                 else -> {
                     Text(
-                        "  ${records.size} Records",
+                        "  Your latest activity",
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = Gray500, fontWeight = FontWeight.SemiBold
                         ),
@@ -215,8 +223,33 @@ fun AttendanceHistoryScreen(onBack: () -> Unit) {
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        itemsIndexed(records) { index, record ->
-                            HistoryCard(record = record, index = index)
+                        if (records.isNotEmpty()) {
+                            item {
+                                SectionHeader("Attendance")
+                            }
+                            itemsIndexed(records) { index, record ->
+                                HistoryCard(record = record, index = index)
+                            }
+                        }
+                        item {
+                            SectionHeader("Exit Requests")
+                        }
+                        if (requestHistory.isEmpty()) {
+                            item { EmptySectionCard("No exit requests submitted yet.") }
+                        } else {
+                            itemsIndexed(requestHistory) { _, request ->
+                                ExitRequestHistoryCard(request = request)
+                            }
+                        }
+                        item {
+                            SectionHeader("Geofence Activity")
+                        }
+                        if (geofenceHistory.isEmpty()) {
+                            item { EmptySectionCard("No geofence events recorded yet.") }
+                        } else {
+                            itemsIndexed(geofenceHistory) { _, event ->
+                                GeofenceHistoryCard(event = event)
+                            }
                         }
                         item { Spacer(Modifier.height(24.dp)) }
                     }
@@ -306,6 +339,122 @@ private fun HistoryCard(record: HistoryRecord, index: Int) {
                         color = accent, fontWeight = FontWeight.Bold
                     ),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Gray900),
+        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun EmptySectionCard(message: String) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall.copy(color = Gray500),
+            modifier = Modifier.padding(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun ExitRequestHistoryCard(request: ExitRequestDto) {
+    val accent = when (request.status) {
+        "APPROVED" -> GreenColor
+        "DENIED" -> MaterialTheme.colorScheme.error
+        else -> AmberColor
+    }
+    val accentBg = when (request.status) {
+        "APPROVED" -> GreenLight2
+        "DENIED" -> MaterialTheme.colorScheme.errorContainer
+        else -> AmberLight2
+    }
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(request.reason, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                Surface(shape = RoundedCornerShape(8.dp), color = accentBg) {
+                    Text(
+                        request.status_label ?: request.status ?: "PENDING",
+                        style = MaterialTheme.typography.labelSmall.copy(color = accent, fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Submitted: ${request.date ?: "--"} • ${request.time ?: "--"}",
+                style = MaterialTheme.typography.bodySmall.copy(color = Gray500)
+            )
+            if (!request.resolved_by_name.isNullOrBlank() || !request.resolution_time.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Faculty: ${request.resolved_by_name ?: "Faculty"} • ${request.resolution_time ?: "--"}",
+                    style = MaterialTheme.typography.bodySmall.copy(color = Gray500)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeofenceHistoryCard(event: GeofenceEventDto) {
+    val accent = if (event.event_type == "EXIT") AmberColor else Indigo
+    val accentBg = if (event.event_type == "EXIT") AmberLight2 else IndigoLight
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(shape = CircleShape, color = accentBg, modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (event.event_type == "EXIT") Icons.Filled.DirectionsWalk else Icons.Filled.LocationOn,
+                        null,
+                        tint = accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    event.note ?: event.event_type,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, color = Gray900)
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${event.date ?: "--"} • ${event.time ?: "--"}",
+                    style = MaterialTheme.typography.labelSmall.copy(color = Gray500)
                 )
             }
         }

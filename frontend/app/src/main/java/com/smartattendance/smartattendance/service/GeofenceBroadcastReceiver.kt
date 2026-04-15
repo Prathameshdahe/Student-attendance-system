@@ -3,49 +3,93 @@ package com.smartattendance.smartattendance.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
-import com.smartattendance.smartattendance.data.repository.AttendanceRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val geofencingEvent = GeofencingEvent.fromIntent(intent) ?: return
+        val event = GeofencingEvent.fromIntent(intent) ?: return
+        if (event.hasError()) return
 
-        if (geofencingEvent.hasError()) {
-            Log.e("Geofence", "Error: ${geofencingEvent.errorCode}")
-            return
+        val transitionType = when (event.geofenceTransition) {
+            Geofence.GEOFENCE_TRANSITION_EXIT  -> "EXIT"
+            Geofence.GEOFENCE_TRANSITION_ENTER -> "RETURN"
+            else -> return
         }
 
-        val repo = AttendanceRepository(context)
+        // Step 1: Save locally FIRST — never lose the event
+        saveEventToQueue(context, transitionType)
+
+        // Step 2: Try sending immediately
+        if (isNetworkAvailable(context)) {
+            sendQueuedEvents(context)
+        }
+        // If no network → WorkManager picks it up when internet returns
+    }
+
+    private fun saveEventToQueue(context: Context, type: String) {
+        val prefs = context.getSharedPreferences("geofence_queue", Context.MODE_PRIVATE)
+        val existing = prefs.getString("events", "[]") ?: "[]"
+        val arr = JSONArray(existing)
+        val obj = JSONObject().apply {
+            put("type", type)
+            put("timestamp", System.currentTimeMillis())
+            put("date", SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
+        }
+        arr.put(obj)
+        prefs.edit().putString("events", arr.toString()).apply()
         
-        when (geofencingEvent.geofenceTransition) {
-            Geofence.GEOFENCE_TRANSITION_EXIT -> {
-                Log.d("Geofence", "UNAUTHORIZED_EXIT detected!")
-                CoroutineScope(Dispatchers.IO).launch {
-                    val result = repo.sendGeofenceAlert("UNAUTHORIZED_EXIT")
-                    result.onSuccess {
-                        Log.d("Geofence", "Backend notified of EXIT successfully.")
-                    }.onFailure { e ->
-                        Log.e("Geofence", "Failed to notify backend: ${e.message}")
-                    }
-                }
-            }
-            Geofence.GEOFENCE_TRANSITION_ENTER -> {
-                Log.d("Geofence", "Student RETURNED to campus.")
-                CoroutineScope(Dispatchers.IO).launch {
-                    val result = repo.sendGeofenceAlert("RETURN_TO_CAMPUS")
-                    result.onSuccess {
-                        Log.d("Geofence", "Backend notified of RETURN successfully.")
-                    }.onFailure { e ->
-                        Log.e("Geofence", "Failed to notify backend: ${e.message}")
-                    }
-                }
-            }
-        }
+        scheduleRetry(context)
+    }
+
+    private fun sendQueuedEvents(context: Context) {
+        val request = OneTimeWorkRequestBuilder<GeofenceUploadWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(context).enqueue(request)
+    }
+
+    private fun scheduleRetry(context: Context) {
+        val request = PeriodicWorkRequestBuilder<GeofenceUploadWorker>(
+            15, TimeUnit.MINUTES
+        )
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+        )
+        .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "geofence_retry",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    private fun isNetworkAvailable(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val activeNetwork = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 }

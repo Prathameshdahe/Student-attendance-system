@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Android & Gradle Caches
+.gradle-local/
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# IDE Files
+.idea/
+*.iml
+
+# DB
+*.db

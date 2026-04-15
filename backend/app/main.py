@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.database import engine, Base
+from app.core.database import engine, Base, run_startup_migrations
 from app.models.user import User                    # ensure table registered
-from app.models.attendance import AttendanceRecord  # ensure table registered
+from app.models.attendance import AttendanceRecord, ExitRequest, GeofenceEvent  # ensure table registered
 from app.routers import auth, students, attendance
 
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
+run_startup_migrations()
 
 app = FastAPI(
     title="KIWI Smart Attendance API",

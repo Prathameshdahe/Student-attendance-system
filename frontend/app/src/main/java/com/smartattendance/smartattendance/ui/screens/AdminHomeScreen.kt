@@ -24,6 +24,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.remote.ExitRequestDto
+import com.smartattendance.smartattendance.data.remote.GeofenceEventDto
 import com.smartattendance.smartattendance.data.repository.AttendanceRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -52,29 +53,47 @@ fun AdminHomeScreen(
     val todayDisplay = SimpleDateFormat("EEEE, dd MMM", Locale.getDefault()).format(Date())
 
     var adminName by remember { mutableStateOf("...") }
+    val repo = remember(context) { AttendanceRepository(context) }
     var activityLog by remember { mutableStateOf<List<ActivityLogItem>>(emptyList()) }
     var pendingRequests by remember { mutableStateOf<List<ExitRequestDto>>(emptyList()) }
-
+    var requestHistory by remember { mutableStateOf<List<ExitRequestDto>>(emptyList()) }
+    var geofenceEvents by remember { mutableStateOf<List<GeofenceEventDto>>(emptyList()) }
+    var isRefreshing by remember { mutableStateOf(true) }
+    var resolvingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect("fetchAdmin") {
         adminName = withContext(Dispatchers.IO) {
             SessionManager(context).getUserName() ?: "Admin"
         }
     }
 
-    LaunchedEffect("pollExitRequests") {
-        val repo = AttendanceRepository(context)
-        while(true) {
+    suspend fun refreshDashboard() {
+        isRefreshing = true
+        val live = repo.getLiveAttendanceToday().getOrNull().orEmpty()
+        pendingRequests = repo.getPendingExitRequests().getOrNull().orEmpty()
+        requestHistory = repo.getExitRequestHistory().getOrNull().orEmpty()
+        geofenceEvents = repo.getGeofenceEvents().getOrNull().orEmpty()
+        activityLog = live.map { record ->
+            ActivityLogItem(
+                studentName = record.name,
+                rollNumber = record.roll ?: "-",
+                action = if (record.status == "IN") "On Campus" else "Checked Out",
+                time = record.time_out ?: record.time_in ?: "--",
+                status = if (record.status == "IN") "SUCCESS" else "WARNING"
+            )
+        }
+        isRefreshing = false
+    }
+
+    LaunchedEffect("pollDashboard") {
+        while (true) {
             try {
-                val reqs = repo.getPendingExitRequests().getOrNull()
-                if (reqs != null) {
-                    pendingRequests = reqs
-                }
-            } catch (e: Exception) {}
+                refreshDashboard()
+            } catch (_: Exception) {
+                isRefreshing = false
+            }
             delay(5000)
         }
     }
-
-
     val barcodeLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
         if (result.contents != null) {
             scope.launch {
@@ -84,8 +103,6 @@ fun AdminHomeScreen(
                         Toast.makeText(context, "Invalid QR Format", Toast.LENGTH_SHORT).show()
                         return@launch
                     }
-                    
-                    val repo = AttendanceRepository(context)
                     val scanRes = repo.scanQr(result.contents)
                     
                     scanRes.onSuccess { data ->
@@ -182,7 +199,7 @@ fun AdminHomeScreen(
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                KiwiStatCard("Present", "${activityLog.count { it.action == "Check In" }}", Modifier.weight(1f))
+                KiwiStatCard("Present", "${activityLog.count { it.action == "On Campus" }}", Modifier.weight(1f))
                 KiwiStatCard("Absent", "—", Modifier.weight(1f))
                 KiwiStatCard("Scanned", "${activityLog.size}", Modifier.weight(1f))
             }
@@ -222,25 +239,44 @@ fun AdminHomeScreen(
                 if (pendingRequests.isNotEmpty()) {
                     item {
                         Text("Pending Exit Requests", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
-                        Spacer(Modifier.height(4.dp))
                     }
-                    items(pendingRequests) { req ->
+                    items(pendingRequests) { request ->
                         ExitRequestCard(
-                            req = req,
+                            req = request,
+                            isResolving = resolvingIds.contains(request.request_id ?: request.id.orEmpty()),
                             onResolve = { action ->
-                                scope.launch {
-                                    try {
-                                        val reqId = (req.request_id ?: req.id ?: 0).toString()
-                                        AttendanceRepository(context).resolveExitRequest(reqId, action)
-                                        pendingRequests = pendingRequests.filter {
-                                            (it.request_id ?: it.id) != (req.request_id ?: req.id)
-                                        }
-                                    } catch (e: Exception) {}
+                                val requestId = request.request_id ?: request.id
+                                if (!requestId.isNullOrBlank()) {
+                                    scope.launch {
+                                        resolvingIds = resolvingIds + requestId
+                                        repo.resolveExitRequest(requestId, action)
+                                        resolvingIds = resolvingIds - requestId
+                                        refreshDashboard()
+                                    }
                                 }
                             }
                         )
                     }
-                    item { Spacer(Modifier.height(16.dp)) }
+                }
+
+                if (geofenceEvents.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Recent Geofence Alerts", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+                    }
+                    items(geofenceEvents.take(5)) { event ->
+                        GeofenceAlertCard(event = event)
+                    }
+                }
+
+                if (requestHistory.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Recent Request Decisions", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+                    }
+                    items(requestHistory.filter { it.status != "PENDING" }.take(5)) { request ->
+                        ExitHistoryCard(request = request)
+                    }
                 }
 
                 if (activityLog.isEmpty()) {
@@ -336,13 +372,10 @@ fun KiwiActivityCard(item: ActivityLogItem) {
     }
 }
 
-fun formatTimestamp(millis: Long): String =
-    SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
-
-
 @Composable
 fun ExitRequestCard(
-    req: com.smartattendance.smartattendance.data.remote.ExitRequestDto,
+    req: ExitRequestDto,
+    isResolving: Boolean,
     onResolve: (String) -> Unit
 ) {
     ElevatedCard(
@@ -356,7 +389,7 @@ fun ExitRequestCard(
                 Text(req.name ?: "Unknown", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 Text(req.time ?: "", style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
             }
-            Text("Roll: ${req.roll}", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            Text("Roll: ${req.roll ?: "-"}", style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
             Spacer(Modifier.height(6.dp))
             Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(8.dp)) {
                 Text(
@@ -367,14 +400,86 @@ fun ExitRequestCard(
             }
             Spacer(Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onResolve("DENY") }) {
+                TextButton(onClick = { onResolve("DENY") }, enabled = !isResolving) {
                     Text("Deny", color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onResolve("APPROVE") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
-                    Text("Approve", color = Color.White)
+                Button(
+                    onClick = { onResolve("APPROVE") },
+                    enabled = !isResolving,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Text(if (isResolving) "Saving..." else "Approve", color = Color.White)
                 }
             }
         }
     }
 }
+
+@Composable
+fun GeofenceAlertCard(event: GeofenceEventDto) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(shape = CircleShape, color = if (event.event_type == "EXIT") Color(0xFFFEF3C7) else Color(0xFFE0E7FF), modifier = Modifier.size(40.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (event.event_type == "EXIT") Icons.Filled.DirectionsWalk else Icons.Filled.LocationOn,
+                        null,
+                        tint = if (event.event_type == "EXIT") Color(0xFFF59E0B) else Color(0xFF6366F1),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(event.name ?: "Student", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                Text(event.note ?: event.event_type, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            }
+            Text(event.time ?: "--", style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+        }
+    }
+}
+
+@Composable
+fun ExitHistoryCard(request: ExitRequestDto) {
+    val accent = if (request.status == "APPROVED") Color(0xFF10B981) else MaterialTheme.colorScheme.error
+    val background = if (request.status == "APPROVED") Color(0xFFD1FAE5) else MaterialTheme.colorScheme.errorContainer
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.elevatedCardElevation(1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(request.name ?: "Student", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                Surface(shape = RoundedCornerShape(8.dp), color = background) {
+                    Text(
+                        request.status_label ?: request.status ?: "-",
+                        style = MaterialTheme.typography.labelSmall.copy(color = accent, fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(request.reason, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            Text(
+                "${request.time ?: "--"}${request.resolution_time?.let { " • $it" } ?: ""}",
+                style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            )
+        }
+    }
+}
+
+fun formatTimestamp(millis: Long): String =
+    SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(millis))
+
+

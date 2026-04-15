@@ -11,13 +11,30 @@ class SessionManager(context: Context) {
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
 
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
-        context,
-        "kiwi_session",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val prefs: SharedPreferences by lazy {
+        try {
+            EncryptedSharedPreferences.create(
+                context,
+                "kiwi_session",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            // Android AutoBackup restored the file but the Keystore key was wiped across uninstalls.
+            val prefFile = java.io.File("${context.applicationInfo.dataDir}/shared_prefs/kiwi_session.xml")
+            if (prefFile.exists()) {
+                prefFile.delete()
+            }
+            EncryptedSharedPreferences.create(
+                context,
+                "kiwi_session",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
+    }
 
     companion object {
         private const val KEY_TOKEN = "jwt_token"

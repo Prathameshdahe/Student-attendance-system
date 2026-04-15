@@ -15,20 +15,19 @@ class StudentOut:
 
 @router.get("")
 def list_students(
-    class_name: str = Query("comp-2", alias="class"),
+    class_name: str | None = Query(default=None, alias="class"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Admin-only: List all students in a given class."""
+    """Admin-only: List all active students, optionally filtered by class."""
     if current_user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    students = (
-        db.query(User)
-        .filter(User.role == "STUDENT", User.class_name == class_name, User.is_active == True)
-        .order_by(User.roll_number)
-        .all()
-    )
+    query = db.query(User).filter(User.role == "STUDENT", User.is_active == True)
+    if class_name:
+        query = query.filter(User.class_name == class_name)
+
+    students = query.order_by(User.class_name, User.division, User.roll_number, User.name).all()
 
     return [
         {

@@ -26,3 +26,19 @@ class ExitRequest(Base):
     resolved_by= Column(String, nullable=True)                # FK -> users.id (admin)
     date       = Column(String, default=lambda: datetime.utcnow().strftime("%Y-%m-%d"))
     created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    left_campus_at = Column(DateTime, nullable=True)
+    returned_campus_at = Column(DateTime, nullable=True)
+
+
+class GeofenceEvent(Base):
+    __tablename__ = "geofence_events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id = Column(String, nullable=False, index=True)
+    request_id = Column(String, nullable=True, index=True)
+    event_type = Column(String, nullable=False)              # "EXIT" | "RETURN"
+    permission_status = Column(String, nullable=False, default="NONE")
+    source_type = Column(String, nullable=False)             # "UNAUTHORIZED_EXIT" | "RETURN_TO_CAMPUS"
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

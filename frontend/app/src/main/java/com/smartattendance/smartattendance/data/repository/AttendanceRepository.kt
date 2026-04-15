@@ -4,21 +4,22 @@ import android.content.Context
 import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.model.Attendance
 import com.smartattendance.smartattendance.data.model.User
-import java.text.SimpleDateFormat
-import java.util.*
 import com.smartattendance.smartattendance.data.remote.ApiClient
-import com.smartattendance.smartattendance.data.remote.ScanRequest
-import com.smartattendance.smartattendance.data.remote.ScanResponse
+import com.smartattendance.smartattendance.data.remote.ExitRequest
+import com.smartattendance.smartattendance.data.remote.ExitRequestDto
+import com.smartattendance.smartattendance.data.remote.ExitResponse
+import com.smartattendance.smartattendance.data.remote.GeofenceEventDto
 import com.smartattendance.smartattendance.data.remote.GeofenceRequest
 import com.smartattendance.smartattendance.data.remote.GeofenceResponse
-import com.smartattendance.smartattendance.data.remote.ExitRequest
-import com.smartattendance.smartattendance.data.remote.ExitResponse
 import com.smartattendance.smartattendance.data.remote.HistoryRecord
+import com.smartattendance.smartattendance.data.remote.LiveAttendanceDto
+import com.smartattendance.smartattendance.data.remote.ResolveActionRequest
+import com.smartattendance.smartattendance.data.remote.ScanRequest
+import com.smartattendance.smartattendance.data.remote.ScanResponse
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-/**
- * Placeholder AttendanceRepository — Firebase removed.
- * QR check-in/check-out logic will be wired to backend API endpoints in the next milestone.
- */
 class AttendanceRepository(context: Context) {
 
     private val session = SessionManager(context)
@@ -26,32 +27,23 @@ class AttendanceRepository(context: Context) {
     private val todayDate: String
         get() = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-    /** Returns the current user's ID from the stored JWT session */
     fun getCurrentUserId(): String = session.getUserId() ?: ""
 
-    /** Returns the current user's name */
     fun getCurrentUserName(): String = session.getUserName() ?: "Student"
 
-    /** Returns the current user's role */
     fun getCurrentUserRole(): String = session.getRole() ?: "STUDENT"
 
-    /**
-     * Generates a local QR token payload for the student.
-     * Format: "studentId::uuid" — validated by the Admin scanner against the backend.
-     */
     fun generateQrToken(): String {
         val uid = getCurrentUserId()
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        return "${uid}::${date}"
+        return "${uid}::${todayDate}"
     }
 
     suspend fun scanQr(qrPayload: String): Result<ScanResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
             val adminId = getCurrentUserId()
-            val req = ScanRequest(qr_payload = qrPayload, scanned_by = adminId)
-            val response = ApiClient.api.scanQr("Bearer $token", req)
-            Result.success(response)
+            val request = ScanRequest(qr_payload = qrPayload, scanned_by = adminId)
+            Result.success(ApiClient.api.scanQr("Bearer $token", request))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -60,9 +52,7 @@ class AttendanceRepository(context: Context) {
     suspend fun sendGeofenceAlert(type: String): Result<GeofenceResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val req = GeofenceRequest(type = type)
-            val response = ApiClient.api.sendGeofenceAlert("Bearer $token", req)
-            Result.success(response)
+            Result.success(ApiClient.api.sendGeofenceAlert("Bearer $token", GeofenceRequest(type)))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -71,62 +61,90 @@ class AttendanceRepository(context: Context) {
     suspend fun submitExitRequest(reason: String): Result<ExitResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val req = ExitRequest(reason = reason)
-            val response = ApiClient.api.submitExitRequest("Bearer $token", req)
-            Result.success(response)
+            Result.success(ApiClient.api.submitExitRequest("Bearer $token", ExitRequest(reason)))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getMyHistory(): Result<List<com.smartattendance.smartattendance.data.remote.HistoryRecord>> {
+    suspend fun getMyHistory(): Result<List<HistoryRecord>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val response = ApiClient.api.getMyHistory("Bearer $token")
-            Result.success(response)
+            Result.success(ApiClient.api.getMyHistory("Bearer $token"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getPendingExitRequests(): Result<List<com.smartattendance.smartattendance.data.remote.ExitRequestDto>> {
+    suspend fun getLiveAttendanceToday(): Result<List<LiveAttendanceDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val response = ApiClient.api.getPendingExitRequests("Bearer $token")
-            Result.success(response)
+            Result.success(ApiClient.api.getLiveAttendanceToday("Bearer $token"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun resolveExitRequest(reqId: String, action: String): Result<com.smartattendance.smartattendance.data.remote.ExitResponse> {
+    suspend fun getPendingExitRequests(): Result<List<ExitRequestDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val response = ApiClient.api.resolveExitRequest("Bearer $token", reqId, com.smartattendance.smartattendance.data.remote.ResolveActionRequest(action))
-            Result.success(response)
+            Result.success(ApiClient.api.getPendingExitRequests("Bearer $token"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun getMyExitRequests(): Result<List<com.smartattendance.smartattendance.data.remote.ExitRequestDto>> {
+    suspend fun resolveExitRequest(reqId: String, action: String): Result<ExitResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            val response = ApiClient.api.getMyExitRequests("Bearer $token")
-            Result.success(response)
+            Result.success(ApiClient.api.resolveExitRequest("Bearer $token", reqId, ResolveActionRequest(action)))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // ── Stub methods — to be replaced with Retrofit calls in milestone 2 ────
+    suspend fun getMyExitRequests(): Result<List<ExitRequestDto>> {
+        return try {
+            val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
+            Result.success(ApiClient.api.getMyExitRequests("Bearer $token"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getExitRequestHistory(): Result<List<ExitRequestDto>> {
+        return try {
+            val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
+            Result.success(ApiClient.api.getExitRequestHistory("Bearer $token"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getGeofenceEvents(): Result<List<GeofenceEventDto>> {
+        return try {
+            val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
+            Result.success(ApiClient.api.getGeofenceEvents("Bearer $token"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getMyGeofenceEvents(): Result<List<GeofenceEventDto>> {
+        return try {
+            val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
+            Result.success(ApiClient.api.getMyGeofenceEvents("Bearer $token"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun markCheckIn(studentId: String): Result<Unit> {
-        return Result.failure(NotImplementedError("Backend QR check-in coming soon"))
+        return Result.failure(NotImplementedError("Backend QR check-in is used instead"))
     }
 
     suspend fun markCheckOut(studentId: String): Result<Unit> {
-        return Result.failure(NotImplementedError("Backend QR check-out coming soon"))
+        return Result.failure(NotImplementedError("Backend QR check-out is used instead"))
     }
 
     suspend fun getTodayLog(studentId: String): Result<Attendance?> {

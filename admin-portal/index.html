@@ -334,8 +334,9 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8000";
-const TOTAL_STUDENTS = 4;
+const API_BASE = window.location.hostname
+  ? `http://${window.location.hostname}:8000`
+  : "http://192.168.10.40:8000";
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
@@ -358,6 +359,24 @@ async function apiFetchLiveToday(token) {
 }
 async function apiFetchExitRequests(token) {
   const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+async function apiFetchExitHistory(token, studentId = null, limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (studentId) params.set("student_id", studentId);
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/history?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!r.ok) throw new Error("Failed");
+  return r.json();
+}
+async function apiFetchGeofenceEvents(token, studentId = null, limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (studentId) params.set("student_id", studentId);
+  const r = await fetch(`${API_BASE}/attendance/geofence-events?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
   if (!r.ok) throw new Error("Failed");
   return r.json();
 }
@@ -475,7 +494,7 @@ function downloadPDF(student, record) {
 }
 
 // ─── STUDENT MODAL ────────────────────────────────────────────────────────────
-function StudentModal({ s, rec, onClose }) {
+function StudentModal({ s, rec, onClose, exitHistory = [], geofenceHistory = [], loadingHistory = false }) {
   const status = rec ? rec.status : "ABSENT";
   const initials = s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -496,6 +515,53 @@ function StudentModal({ s, rec, onClose }) {
               <span className="badge-dot" />
               {status === 'IN' ? 'ACTIVE ON CAMPUS' : status === 'COMPLETED' ? 'DEPARTED' : 'NO RECORD'}
             </span>
+          </div>
+          <div style={{ display: "grid", gap: "1rem" }}>
+            <div>
+              <div className="stat-box-label" style={{ marginBottom: "8px" }}>Exit Request History</div>
+              {loadingHistory ? (
+                <div className="stat-box" style={{ color: "var(--text2)" }}>Loading request historyâ€¦</div>
+              ) : exitHistory.length === 0 ? (
+                <div className="stat-box" style={{ color: "var(--text2)" }}>No exit requests found for this student.</div>
+              ) : exitHistory.map(item => (
+                <div key={item.request_id || item.id} className="stat-box" style={{ marginBottom: "0.75rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <div style={{ fontWeight: 600 }}>{item.reason}</div>
+                    <span className={`badge ${item.status === 'APPROVED' ? 'badge-out' : item.status === 'DENIED' ? 'badge-pending' : 'badge-in'}`}>
+                      {item.status_label || item.status}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text2)" }}>
+                    Submitted: {item.date || 'â€”'} Â· {item.time || 'â€”'}
+                  </div>
+                  {(item.resolved_by_name || item.resolution_time) && (
+                    <div style={{ marginTop: "4px", fontSize: "0.8rem", color: "var(--text2)" }}>
+                      Faculty: {item.resolved_by_name || 'Faculty'} Â· {item.resolution_time || 'â€”'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="stat-box-label" style={{ marginBottom: "8px" }}>Geofence History</div>
+              {loadingHistory ? (
+                <div className="stat-box" style={{ color: "var(--text2)" }}>Loading geofence historyâ€¦</div>
+              ) : geofenceHistory.length === 0 ? (
+                <div className="stat-box" style={{ color: "var(--text2)" }}>No geofence events recorded for this student.</div>
+              ) : geofenceHistory.map(item => (
+                <div key={item.id} className="stat-box" style={{ marginBottom: "0.75rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <div style={{ fontWeight: 600 }}>{item.note || item.event_type}</div>
+                    <span className={`badge ${item.event_type === 'EXIT' ? 'badge-pending' : 'badge-in'}`}>
+                      {item.event_type}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--text2)" }}>
+                    {item.date || 'â€”'} Â· {item.time || 'â€”'}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         <div className="modal-body">
@@ -573,10 +639,13 @@ function Dashboard({ session, onLogout }) {
   const [students, setStudents] = useState([]);
   const [records, setRecords] = useState([]);
   const [exitRequests, setExitRequests] = useState([]);
+  const [requestHistory, setRequestHistory] = useState([]);
+  const [geofenceEvents, setGeofenceEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [lastSync, setLastSync] = useState(new Date());
   const [selected, setSelected] = useState(null);
+  const [selectedHistory, setSelectedHistory] = useState({ loading: false, exitHistory: [], geofenceHistory: [] });
   const [resolving, setResolving] = useState({});
   const [activeTab, setActiveTab] = useState('live');   // 'live' | 'analytics'
   const [analyticsData, setAnalyticsData] = useState([]);
@@ -601,23 +670,24 @@ function Dashboard({ session, onLogout }) {
   const totalIn = records.length;
   const active = records.filter(r => r.status === 'IN').length;
   const departed = records.filter(r => r.status === 'COMPLETED').length;
+  const totalStudents = students.length;
 
   const cntTotal = useAnimatedCounter(totalIn);
   const cntActive = useAnimatedCounter(active);
   const cntDeparted = useAnimatedCounter(departed);
 
-  const occupancyPct = TOTAL_STUDENTS > 0 ? (active / TOTAL_STUDENTS) * 100 : 0;
+  const occupancyPct = totalStudents > 0 ? (active / totalStudents) * 100 : 0;
 
   const loadData = useCallback(async () => {
     try {
-      if (students.length === 0) {
-        const stds = await apiFetchStudents(session.token);
-        setStudents(stds);
-      }
-      const [recs, exits] = await Promise.all([
+      const [stds, recs, exits, history, alerts] = await Promise.all([
+        apiFetchStudents(session.token),
         apiFetchLiveToday(session.token),
-        apiFetchExitRequests(session.token)
+        apiFetchExitRequests(session.token),
+        apiFetchExitHistory(session.token, null, 10),
+        apiFetchGeofenceEvents(session.token, null, 10)
       ]);
+      setStudents(stds);
       setRecords(recs);
 
       // Toast if new exit request arrived
@@ -627,6 +697,8 @@ function Dashboard({ session, onLogout }) {
       }
       prevExitCount.current = exits.length;
       setExitRequests(exits);
+      setRequestHistory(history);
+      setGeofenceEvents(alerts);
       setLastSync(new Date());
       setIsOnline(true);
       setLoading(false);
@@ -634,7 +706,7 @@ function Dashboard({ session, onLogout }) {
       setIsOnline(false);
       setLoading(false);
     }
-  }, [session.token, students.length, addToast]);
+  }, [session.token, addToast]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => {
@@ -659,6 +731,21 @@ function Dashboard({ session, onLogout }) {
       addToast('error', 'Error', 'Could not resolve the request. Try again.');
     } finally {
       setResolving(p => { const n = { ...p }; delete n[reqId]; return n; });
+    }
+  }
+
+  async function openStudentModal(student, record) {
+    setSelected({ s: student, rec: record });
+    setSelectedHistory({ loading: true, exitHistory: [], geofenceHistory: [] });
+    try {
+      const [exitHistory, geofenceHistory] = await Promise.all([
+        apiFetchExitHistory(session.token, student.id, 12),
+        apiFetchGeofenceEvents(session.token, student.id, 12)
+      ]);
+      setSelectedHistory({ loading: false, exitHistory, geofenceHistory });
+    } catch {
+      setSelectedHistory({ loading: false, exitHistory: [], geofenceHistory: [] });
+      addToast('error', 'History Error', 'Could not load the student timeline.');
     }
   }
 
@@ -707,7 +794,7 @@ function Dashboard({ session, onLogout }) {
             <div className="occupancy-wrap">
               <div className="occupancy-label">
                 <span>Campus Occupancy</span>
-                <span>{active} / {TOTAL_STUDENTS} students</span>
+                <span>{active} / {totalStudents} students</span>
               </div>
               <div className="occupancy-track">
                 <div className="occupancy-fill" style={{ width: `${occupancyPct}%` }} />
@@ -776,6 +863,56 @@ function Dashboard({ session, onLogout }) {
             </div>
           )}
 
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title">Recent Request Decisions</div>
+              <div className="panel-meta">{requestHistory.length} items</div>
+            </div>
+            <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {requestHistory.length === 0 ? (
+                <div className="empty-feed" style={{ padding: "1rem" }}>No request history yet.</div>
+              ) : (
+                requestHistory.map(item => (
+                  <div key={item.request_id || item.id} className="feed-item">
+                    <div className="feed-time">{item.time || '--'}</div>
+                    <div style={{ flex: 1 }}>
+                      <div className="feed-name">{item.name || 'Student'}</div>
+                      <div className="roster-meta">{item.reason}</div>
+                    </div>
+                    <span className={`feed-pill ${item.status === 'APPROVED' ? 'out' : item.status === 'DENIED' ? 'exit' : 'in'}`}>
+                      {item.status_label || item.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div className="panel-title">Geofence Alerts</div>
+              <div className="panel-meta">{geofenceEvents.length} recent</div>
+            </div>
+            <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {geofenceEvents.length === 0 ? (
+                <div className="empty-feed" style={{ padding: "1rem" }}>No geofence alerts recorded.</div>
+              ) : (
+                geofenceEvents.map(item => (
+                  <div key={item.id} className="feed-item">
+                    <div className="feed-time">{item.time || '--'}</div>
+                    <div style={{ flex: 1 }}>
+                      <div className="feed-name">{item.name || 'Student'}</div>
+                      <div className="roster-meta">{item.note || item.event_type}</div>
+                    </div>
+                    <span className={`feed-pill ${item.event_type === 'EXIT' ? 'exit' : 'in'}`}>
+                      {item.event_type}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           {/* Roster */}
           <div className="panel">
             <div className="panel-header">
@@ -820,7 +957,7 @@ function Dashboard({ session, onLogout }) {
                         <td><span className={`time-chip ${!rec?.time_in ? 'blank' : ''}`}>{rec?.time_in || '--:--'}</span></td>
                         <td><span className={`time-chip ${!rec?.time_out ? 'blank' : ''}`}>{rec?.time_out || '--:--'}</span></td>
                         <td>
-                          <button className="btn-view" onClick={() => setSelected({ s, rec })}>View</button>
+                          <button className="btn-view" onClick={() => openStudentModal(s, rec)}>View</button>
                         </td>
                       </tr>
                     );
@@ -949,7 +1086,19 @@ function Dashboard({ session, onLogout }) {
         </div>
       )}
 
-      {selected && <StudentModal s={selected.s} rec={selected.rec} onClose={() => setSelected(null)} />}
+      {selected && (
+        <StudentModal
+          s={selected.s}
+          rec={selected.rec}
+          exitHistory={selectedHistory.exitHistory}
+          geofenceHistory={selectedHistory.geofenceHistory}
+          loadingHistory={selectedHistory.loading}
+          onClose={() => {
+            setSelected(null);
+            setSelectedHistory({ loading: false, exitHistory: [], geofenceHistory: [] });
+          }}
+        />
+      )}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );

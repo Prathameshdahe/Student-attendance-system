@@ -1,7 +1,10 @@
 package com.smartattendance.smartattendance.ui.screens
 
+import android.Manifest
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import android.content.pm.PackageManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -16,6 +19,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.QrCode
@@ -36,10 +41,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.smartattendance.smartattendance.data.local.SessionManager
+import com.smartattendance.smartattendance.data.remote.ExitRequestDto
+import com.smartattendance.smartattendance.data.remote.GeofenceEventDto
 import com.smartattendance.smartattendance.data.repository.AttendanceRepository
+import com.smartattendance.smartattendance.service.GeofenceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -51,19 +60,33 @@ import java.util.*
 @Composable
 fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
     val context = LocalContext.current
+    val repo = remember(context) { AttendanceRepository(context) }
+    val geofenceManager = remember(context) { GeofenceManager(context) }
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
     val todayDisplay = SimpleDateFormat("EEE, dd MMM", Locale.getDefault()).format(Date())
 
     var studentName by remember { mutableStateOf("...") }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     
-    var exitStatus by remember { mutableStateOf<String?>(null) }
-    val hasPendingReq = exitStatus == "PENDING"
+    var latestRequest by remember { mutableStateOf<ExitRequestDto?>(null) }
+    var recentGeofenceEvents by remember { mutableStateOf<List<GeofenceEventDto>>(emptyList()) }
+    var geofenceEnabled by remember { mutableStateOf(false) }
+    val hasPendingReq = latestRequest?.status == "PENDING"
     var showExitDialog by remember { mutableStateOf(false) }
     var exitReason by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
     var showSuccess by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        geofenceEnabled =
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (geofenceEnabled) {
+            geofenceManager.startGeofencing()
+        }
+    }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -78,27 +101,41 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
     )
 
     LaunchedEffect(Unit) {
-        val (name, token) = withContext(Dispatchers.IO) {
+        val (name, token, hasLocationPermission) = withContext(Dispatchers.IO) {
             val session = SessionManager(context)
-            val repo = AttendanceRepository(context)
-            Pair(session.getUserName() ?: "Student", repo.generateQrToken())
+            Triple(
+                session.getUserName() ?: "Student",
+                repo.generateQrToken(),
+                hasLocationPermission(context)
+            )
         }
         studentName = name
         qrBitmap = generateQrBitmap(token)
+        geofenceEnabled = hasLocationPermission
+        if (hasLocationPermission) {
+            geofenceManager.startGeofencing()
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
     }
 
     LaunchedEffect(Unit) {
-        val repo = AttendanceRepository(context)
         while (true) {
             try {
                 val reqs = repo.getMyExitRequests().getOrNull()
                 if (!reqs.isNullOrEmpty()) {
                     // Prioritise PENDING over everything else — then show latest
                     val pending = reqs.firstOrNull { it.status == "PENDING" }
-                    exitStatus = (pending ?: reqs.first()).status
+                    latestRequest = pending ?: reqs.first()
                 } else {
-                    exitStatus = null
+                    latestRequest = null
                 }
+                repo.getMyGeofenceEvents().getOrNull()?.let { recentGeofenceEvents = it }
             } catch (e: Exception) {}
             delay(5000)
         }
@@ -142,7 +179,7 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
         ) {
 
             Spacer(Modifier.height(12.dp))
-            StatusBanner(exitStatus = exitStatus)
+            StudentStatusBanner(latestRequest = latestRequest, geofenceEnabled = geofenceEnabled)
             Spacer(Modifier.height(16.dp))
             
             // ── Stat row ──────────────────────────────────────────────────
@@ -153,9 +190,9 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
                     .padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                KiwiStatCard("Status", "Present", Modifier.weight(1f))
+                KiwiStatCard("Request", latestRequest?.status.orEmpty().ifBlank { "Clear" }, Modifier.weight(1f))
                 KiwiStatCard("Today", SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date()), Modifier.weight(1f))
-                KiwiStatCard("Geofence", "Active", Modifier.weight(1f))
+                KiwiStatCard("Alerts", recentGeofenceEvents.count { it.event_type == "EXIT" }.toString(), Modifier.weight(1f))
             }
 
             Spacer(Modifier.height(20.dp))
@@ -317,9 +354,13 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
             ) {
                 Icon(Icons.Filled.History, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("View Attendance History", fontWeight = FontWeight.SemiBold)
+                Text("View Full History", fontWeight = FontWeight.SemiBold)
             }
 
+            Spacer(Modifier.height(16.dp))
+            RequestPreviewCard(request = latestRequest)
+            Spacer(Modifier.height(12.dp))
+            GeofencePreviewCard(events = recentGeofenceEvents, geofenceEnabled = geofenceEnabled)
             Spacer(Modifier.height(32.dp))
         }
 
@@ -356,9 +397,14 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
                             if (exitReason.isNotBlank()) {
                                 coroutineScope.launch {
                                     isSubmitting = true
-                                    val repo = AttendanceRepository(context)
-                                    repo.submitExitRequest(exitReason.trim()).onSuccess {
-                                        exitStatus = "PENDING"
+                                    val reason = exitReason.trim()
+                                    repo.submitExitRequest(reason).onSuccess {
+                                        latestRequest = ExitRequestDto(
+                                            reason = reason,
+                                            status = "PENDING",
+                                            status_label = "Awaiting faculty approval",
+                                            time = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+                                        )
                                         showExitDialog = false
                                         exitReason     = ""
                                         showSuccess    = true
@@ -420,6 +466,92 @@ fun KiwiStatCard(title: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun RequestPreviewCard(request: ExitRequestDto?) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Latest Request", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(6.dp))
+            if (request == null) {
+                Text(
+                    "Your latest faculty decision will appear here.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                )
+            } else {
+                Text(request.reason, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${request.status_label ?: request.status ?: "PENDING"} • ${request.time ?: "--"}",
+                    style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                )
+                if (!request.resolved_by_name.isNullOrBlank() || !request.resolution_time.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Faculty: ${request.resolved_by_name ?: "Faculty"} • ${request.resolution_time ?: "--"}",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeofencePreviewCard(events: List<GeofenceEventDto>, geofenceEnabled: Boolean) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Campus Boundary Activity", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+            Spacer(Modifier.height(6.dp))
+            when {
+                !geofenceEnabled -> {
+                    Text(
+                        "Allow location access so exit and return events are tracked automatically.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
+                events.isEmpty() -> {
+                    Text(
+                        "No geofence movement has been recorded yet.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
+                else -> {
+                    events.take(3).forEach { event ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    event.note ?: event.event_type,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                                Text(
+                                    event.date ?: "",
+                                    style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                )
+                            }
+                            Text(
+                                event.time ?: "--",
+                                style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fun getGreeting(): String {
     return when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
         in 5..11 -> "Morning"
@@ -441,8 +573,43 @@ fun generateQrBitmap(content: String, size: Int = 512): Bitmap? {
 }
 
 @Composable
-private fun StatusBanner(exitStatus: String?) {
-    val (icon, label, bg, fg) = when (exitStatus) {
+private fun StudentStatusBanner(latestRequest: ExitRequestDto?, geofenceEnabled: Boolean) {
+    val (icon, label, bg, fg) = when (latestRequest?.status) {
+        "PENDING" -> listOf(Icons.Filled.PendingActions, "Exit request is pending faculty approval", Color(0xFFFEF3C7), Color(0xFFF59E0B))
+        "APPROVED" -> listOf(Icons.Filled.CheckCircle, "Exit request approved${latestRequest.resolution_time?.let { " • $it" } ?: ""}", Color(0xFFD1FAE5), Color(0xFF10B981))
+        "DENIED" -> listOf(Icons.Filled.Cancel, "Exit request denied${latestRequest.resolution_time?.let { " • $it" } ?: ""}", Color(0xFFFEE2E2), Color(0xFFEF4444))
+        else -> if (geofenceEnabled) {
+            listOf(Icons.Filled.LocationOn, "Campus boundary monitoring is active", Color(0xFFE0E7FF), Color(0xFF6366F1))
+        } else {
+            listOf(Icons.Filled.LocationOn, "Allow location access to enable geofence history", Color(0xFFF3F4F6), Color(0xFF6B7280))
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = bg as Color
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp, 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(icon as androidx.compose.ui.graphics.vector.ImageVector, null, tint = fg as Color, modifier = Modifier.size(18.dp))
+            Text(label as String, style = MaterialTheme.typography.bodySmall.copy(color = fg, fontWeight = FontWeight.SemiBold))
+        }
+    }
+}
+
+private fun hasLocationPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+@Composable
+private fun StatusBanner(latestRequest: ExitRequestDto?, geofenceEnabled: Boolean) {
+    val (icon, label, bg, fg) = when (latestRequest?.status) {
         "PENDING" -> listOf(Icons.Filled.PendingActions, "Exit Pass Pending — Awaiting", Color(0xFFFEF3C7), Color(0xFFF59E0B))
         "APPROVED" -> listOf(Icons.Filled.CheckCircle, "Exit Pass APPROVED — Clear to leave", Color(0xFFD1FAE5), Color(0xFF10B981))
         "DENIED" -> listOf(Icons.Filled.Cancel, "Exit Pass DENIED — See faculty", Color(0xFFFEE2E2), Color(0xFFEF4444))

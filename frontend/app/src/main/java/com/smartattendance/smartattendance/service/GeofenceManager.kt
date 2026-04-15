@@ -15,10 +15,10 @@ class GeofenceManager(private val context: Context) {
 
     companion object {
         const val GEOFENCE_ID = "COLLEGE_CAMPUS"
-        // Actual Bharati Vidyapeeth College of Engineering Coordinates
-        const val COLLEGE_LAT = 18.457119
-        const val COLLEGE_LNG = 73.851028
-        const val GEOFENCE_RADIUS = 300f // 300 meters buffer
+        // Temporary test coordinates (18°27'35.27"N 73°50'57.46"E)
+        const val COLLEGE_LAT = 18.459797
+        const val COLLEGE_LNG = 73.849294
+        const val GEOFENCE_RADIUS = 100f // 100 meters buffer for testing
     }
 
     private val geofencingClient = LocationServices.getGeofencingClient(context)
