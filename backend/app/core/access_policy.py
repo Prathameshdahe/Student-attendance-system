@@ -1,6 +1,19 @@
+"""
+access_policy.py — Admin access guard.
+
+By default ALL access is OPEN so students and admins can log in from any device
+or network without any configuration.
+
+To activate restrictions, set these Railway environment variables:
+  ADMIN_ALLOWED_CLIENT_TYPES  → comma-separated list e.g. "android-app,web-portal"
+  ADMIN_ALLOWED_NETWORKS      → comma-separated CIDRs  e.g. "192.168.1.0/24"
+  ADMIN_ALLOWED_DEVICE_IDS    → comma-separated device IDs from the Android admin app
+
+Leave ALL of them unset (the default) to allow unrestricted login from anywhere.
+"""
+
 import ipaddress
 import os
-from functools import lru_cache
 
 from fastapi import HTTPException, Request
 
@@ -14,8 +27,8 @@ def _parse_csv_env(name: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def _parse_networks(values: list[str]) -> list[ipaddress._BaseNetwork]:
-    networks: list[ipaddress._BaseNetwork] = []
+def _parse_networks(values: list[str]) -> list:
+    networks = []
     for value in values:
         try:
             if "/" in value:
@@ -29,74 +42,64 @@ def _parse_networks(values: list[str]) -> list[ipaddress._BaseNetwork]:
     return networks
 
 
-@lru_cache(maxsize=1)
-def _policy() -> dict:
-    configured_client_types = _parse_csv_env("ADMIN_ALLOWED_CLIENT_TYPES")
-    configured_networks = _parse_csv_env("ADMIN_ALLOWED_NETWORKS")
-    configured_device_ids = _parse_csv_env("ADMIN_ALLOWED_DEVICE_IDS")
-
-    return {
-        "allowed_client_types": {
-            client_type.lower()
-            for client_type in (configured_client_types or ["android-app"])
-        },
-        "allowed_networks": _parse_networks(configured_networks),
-        "allowed_device_ids": set(configured_device_ids),
-    }
-
-
-def resolve_client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for", "")
-    if forwarded_for:
-        first_hop = forwarded_for.split(",")[0].strip()
-        if first_hop:
-            return first_hop
-    return request.client.host if request.client else None
-
-
-def _ip_is_allowed(client_ip: str | None, allowed_networks: list[ipaddress._BaseNetwork]) -> bool:
-    if not client_ip or not allowed_networks:
-        return False
-    try:
-        parsed_ip = ipaddress.ip_address(client_ip)
-    except ValueError:
-        return False
-    return any(parsed_ip in network for network in allowed_networks)
-
-
-def _client_type_is_allowed(client_type: str, allowed_client_types: set[str]) -> bool:
-    if not allowed_client_types:
-        return True
-    return "*" in allowed_client_types or client_type.lower() in allowed_client_types
-
-
 def enforce_admin_access(request: Request, user: User) -> None:
+    """
+    Enforces access policy for ADMIN users only.
+    Students always pass through freely.
+
+    If NO environment variables are configured → OPEN (anyone can log in).
+    Configure variables on Railway to lock down admin access.
+    """
     if user.role != "ADMIN":
+        # Students are never restricted
         return
 
-    policy = _policy()
-    client_ip = resolve_client_ip(request)
-    client_type = request.headers.get("X-KIWI-Client-Type", "unknown").strip().lower()
-    device_id = request.headers.get("X-KIWI-Device-ID", "").strip()
+    allowed_networks = _parse_networks(_parse_csv_env("ADMIN_ALLOWED_NETWORKS"))
+    allowed_device_ids = set(_parse_csv_env("ADMIN_ALLOWED_DEVICE_IDS"))
+    allowed_client_types = set(
+        t.lower() for t in _parse_csv_env("ADMIN_ALLOWED_CLIENT_TYPES")
+    )
 
-    if _ip_is_allowed(client_ip, policy["allowed_networks"]):
+    # If no restrictions are configured at all → open access for admins too
+    if not allowed_networks and not allowed_device_ids and not allowed_client_types:
         return
 
-    if not _client_type_is_allowed(client_type, policy["allowed_client_types"]):
-        allowed = ", ".join(sorted(policy["allowed_client_types"])) or "trusted clients"
+    # ── network allowlist check ──────────────────────────────────────────────
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
+        request.client.host if request.client else None
+    )
+    if allowed_networks and client_ip:
+        try:
+            parsed = ipaddress.ip_address(client_ip)
+            if any(parsed in net for net in allowed_networks):
+                return
+        except ValueError:
+            pass
+
+    # ── client-type allowlist check ──────────────────────────────────────────
+    client_type = request.headers.get("X-KIWI-Client-Type", "").strip().lower()
+    if allowed_client_types:
+        if "*" in allowed_client_types or client_type in allowed_client_types:
+            return
         raise HTTPException(
             status_code=403,
             detail=(
-                f"Admin access is restricted. This request came from '{client_type}'. "
-                f"Use an approved admin client ({allowed}) or an allowlisted network."
+                f"Admin access is restricted. Client '{client_type}' is not in the "
+                f"allowed list: {', '.join(sorted(allowed_client_types))}. "
+                "Set ADMIN_ALLOWED_CLIENT_TYPES on Railway to adjust."
             ),
         )
 
-    if policy["allowed_device_ids"] and device_id not in policy["allowed_device_ids"]:
+    # ── device-ID allowlist check ────────────────────────────────────────────
+    device_id = request.headers.get("X-KIWI-Device-ID", "").strip()
+    if allowed_device_ids:
+        if device_id in allowed_device_ids:
+            return
         raise HTTPException(
             status_code=403,
             detail=(
                 "Admin access is restricted to trusted devices. "
-                "Configure ADMIN_ALLOWED_DEVICE_IDS with your approved Android device ID."
+                "Your device ID is not in ADMIN_ALLOWED_DEVICE_IDS."
             ),
         )
