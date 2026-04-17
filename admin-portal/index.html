@@ -11,35 +11,36 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 <style>
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg:         #f3f4f6;
+    --bg:         #f8fafc;
     --bg2:        #ffffff;
     --surface:    #ffffff;
-    --surface2:   #f9fafb;
-    --border:     #e5e7eb;
-    --border2:    #d1d5db;
-    --indigo:     #2563eb;
-    --indigo-d:   #1d4ed8;
-    --indigo-glow:rgba(37,99,235,0.1);
-    --emerald:    #059669;
-    --emerald-glow:rgba(5,150,105,0.1);
-    --amber:      #d97706;
-    --amber-glow: rgba(217,119,6,0.1);
-    --red:        #dc2626;
-    --red-glow:   rgba(220,38,38,0.1);
-    --cyan:       #0891b2;
-    --text:       #111827;
-    --text2:      #4b5563;
-    --text3:      #6b7280;
+    --surface2:   #f1f5f9;
+    --border:     #e2e8f0;
+    --border2:    #cbd5e1;
+    --indigo:     #334155;
+    --indigo-d:   #0f172a;
+    --indigo-glow:rgba(15,23,42,0.08);
+    --emerald:    #10b981;
+    --emerald-glow:rgba(16,185,129,0.1);
+    --amber:      #f59e0b;
+    --amber-glow: rgba(245,158,11,0.1);
+    --red:        #ef4444;
+    --red-glow:   rgba(239,68,68,0.1);
+    --cyan:       #0ea5e9;
+    --text:       #0f172a;
+    --text2:      #475569;
+    --text3:      #94a3b8;
     --font:       'Inter', sans-serif;
     --mono:       'JetBrains Mono', monospace;
-    --r:          8px;
-    --r-sm:       4px;
-    --trans:      all 0.15s ease-in-out;
+    --r:          12px;
+    --r-sm:       6px;
+    --trans:      all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   html { scroll-behavior: smooth; }
@@ -57,19 +58,20 @@
   /* ── LOGIN ── */
   .login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
   .login-left {
-    background: var(--indigo);
+    background: linear-gradient(135deg, var(--indigo-d), var(--indigo));
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 3rem; text-align: center; color: white;
   }
-  .brand-logo-img { width: 100px; height: 100px; object-fit: contain; margin-bottom: 2rem; }
+  .brand-logo-img { width: 90px; height: 90px; object-fit: contain; margin-bottom: 2rem; opacity: 0.85; filter: grayscale(10%); }
   .login-left h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 1rem; }
   .login-left p { font-size: 1rem; opacity: 0.9; max-width: 300px; line-height: 1.6; }
 
   .glass-card {
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.025);
   }
 
   .login-right {
@@ -145,8 +147,10 @@
 
   /* ── PANELS ── */
   .panel {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
-    box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border); border-radius: var(--r);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
     display: flex; flex-direction: column; overflow: hidden;
   }
   .panel-header {
@@ -473,43 +477,104 @@ function useToasts() {
 }
 
 // ─── PDF DOWNLOAD ─────────────────────────────────────────────────────────────
-function downloadPDF(student, record) {
+function downloadPDF(student, record, exitHistory = [], geofenceHistory = []) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  doc.setFillColor(99, 102, 241);
+  
+  // Header Ribbon
+  doc.setFillColor(51, 65, 85);
   doc.rect(0, 0, 210, 32, "F");
+  
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(16); doc.setFont(undefined, "bold");
-  doc.text("Smart Attendance Report", 14, 14);
+  doc.setFontSize(18); doc.setFont(undefined, "bold");
+  doc.text("Daily Attendance & Activity Report", 14, 16);
+  
   doc.setFontSize(9); doc.setFont(undefined, "normal");
-  doc.text("Bharati Vidyapeeth College of Engineering, Pune", 14, 22);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 120, 22);
-  doc.setTextColor(20, 21, 36);
+  doc.text("Bharati Vidyapeeth College of Engineering, Pune", 14, 24);
+  doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 120, 24);
+  
+  // Student Metadata
+  doc.setTextColor(15, 23, 42);
   doc.setFontSize(14); doc.setFont(undefined, "bold");
-  doc.text(student.name, 14, 50);
-  doc.setFontSize(10); doc.setFont(undefined, "normal"); doc.setTextColor(100, 100, 140);
-  doc.text(`Roll No: ${student.roll}`, 14, 58);
-  doc.text(`Email: ${student.email}`, 14, 64);
-  doc.text(`Division: ${student.division}`, 14, 70);
-  doc.setFillColor(240, 240, 255);
-  doc.rect(14, 84, 182, 10, "F");
-  doc.setFontSize(8); doc.setFont(undefined, "bold"); doc.setTextColor(100, 100, 140);
-  doc.text("DATE", 18, 90); doc.text("STATUS", 60, 90);
-  doc.text("CHECK IN", 110, 90); doc.text("CHECK OUT", 155, 90);
+  doc.text(student.name, 14, 45);
+  
+  doc.setFontSize(10); doc.setFont(undefined, "normal"); doc.setTextColor(71, 85, 105);
+  doc.text(`Roll No: ${student.roll}`, 14, 52);
+  doc.text(`Email: ${student.email}`, 14, 58);
+  doc.text(`Division: ${student.division}`, 14, 64);
+  
+  doc.text(`PRN: ${student.prn || 'N/A'}`, 100, 52);
+  doc.text(`Mobile: ${student.mobile_number || 'N/A'}`, 100, 58);
+  
+  // Attendance Block
   const status = record ? record.status : "ABSENT";
   const today = new Date().toISOString().split("T")[0];
-  doc.setFontSize(9); doc.setFont(undefined, "normal"); doc.setTextColor(20, 21, 36);
-  doc.text(today, 18, 103);
-  if (status === "COMPLETED") doc.setTextColor(16, 185, 129);
-  else if (status === "IN") doc.setTextColor(99, 102, 241);
-  else doc.setTextColor(239, 68, 68);
-  doc.setFont(undefined, "bold"); doc.text(status, 60, 103);
-  doc.setFont(undefined, "normal"); doc.setTextColor(100, 100, 140);
-  doc.text(record?.time_in || "—", 110, 103);
-  doc.text(record?.time_out || "—", 155, 103);
-  doc.setFontSize(8); doc.setTextColor(160, 160, 180);
-  doc.text("_________________________", 130, 170);
-  doc.text("Authorized Faculty Signature", 133, 176);
+  
+  doc.autoTable({
+    startY: 72,
+    head: [['Date', 'Check In', 'Check Out', 'Status']],
+    body: [
+      [today, record?.time_in || "—", record?.time_out || "—", status]
+    ],
+    headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold' },
+    bodyStyles: { textColor: [15, 23, 42] },
+    theme: 'grid',
+    margin: { left: 14, right: 14 }
+  });
+  
+  let currentY = doc.lastAutoTable.finalY + 15;
+  
+  // Exit Requests Table
+  if (exitHistory.length > 0) {
+    doc.setFontSize(12); doc.setFont(undefined, "bold"); doc.setTextColor(15, 23, 42);
+    doc.text("Exit Request History", 14, currentY);
+    
+    const exitBody = exitHistory.map(req => [
+      req.time || '—',
+      req.reason || '—',
+      req.status || '—',
+      req.resolved_by_name || '—'
+    ]);
+    
+    doc.autoTable({
+      startY: currentY + 5,
+      head: [['Time', 'Reason', 'Status', 'Resolved By']],
+      body: exitBody,
+      headStyles: { fillColor: [248, 250, 252], textColor: [71, 85, 105] },
+      theme: 'grid',
+    });
+    currentY = doc.lastAutoTable.finalY + 15;
+  }
+  
+  // Geofence Events Table
+  if (geofenceHistory.length > 0) {
+    doc.setFontSize(12); doc.setFont(undefined, "bold"); doc.setTextColor(15, 23, 42);
+    doc.text("Geofence Events Log", 14, currentY);
+    
+    const geoBody = geofenceHistory.map(ev => [
+      ev.time || '—',
+      ev.event_type || '—',
+      ev.note || '—'
+    ]);
+    
+    doc.autoTable({
+      startY: currentY + 5,
+      head: [['Time', 'Event Type', 'Note/Location']],
+      body: geoBody,
+      headStyles: { fillColor: [248, 250, 252], textColor: [71, 85, 105] },
+      theme: 'grid',
+    });
+    currentY = doc.lastAutoTable.finalY + 15;
+  }
+  
+  // Signature Line
+  currentY = Math.max(currentY + 20, 240);
+  if (currentY > 280) { doc.addPage(); currentY = 40; }
+  
+  doc.setFontSize(8); doc.setTextColor(148, 163, 184);
+  doc.text("_________________________", 130, currentY);
+  doc.text("Authorized Faculty Signature", 133, currentY + 6);
+  
   doc.save(`Attendance_${student.roll}_${today}.pdf`);
 }
 
@@ -530,7 +595,7 @@ function StudentModal({ s, rec, onClose, exitHistory = [], geofenceHistory = [],
             <button className="btn-close" onClick={onClose}>✕</button>
           </div>
           <div className="modal-actions">
-            <button className="btn-dl" onClick={() => downloadPDF(s, rec)}>↓ Download PDF Report</button>
+            <button className="btn-dl" onClick={() => downloadPDF(s, rec, exitHistory, geofenceHistory)}>↓ Download PDF Report</button>
             <span className={`badge ${status === 'COMPLETED' ? 'badge-out' : status === 'IN' ? 'badge-in' : 'badge-pending'}`}>
               <span className="badge-dot" />
               {status === 'IN' ? 'ACTIVE ON CAMPUS' : status === 'COMPLETED' ? 'DEPARTED' : 'NO RECORD'}
