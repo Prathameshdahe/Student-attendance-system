@@ -41,7 +41,7 @@ try:
                 roll_number=s_data["roll"],
                 division=s_data["division"],
                 prn=s_data["prn"],
-                mobile_number=s_data["mobile"],
+                mobile=s_data["mobile"],
                 class_name=s_data["class_name"]
             )
             db.add(student)
