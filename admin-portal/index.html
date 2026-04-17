@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Attendance — BVCOE Admin</title>
 <meta name="description" content="Real-time campus attendance monitoring dashboard for Bharati Vidyapeeth College of Engineering, Pune." />
+<link rel="icon" href="https://img.icons8.com/color/48/000000/kiwi-bird.png" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -334,8 +335,31 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const API_BASE = "https://fabulous-gratitude-production-9d95.up.railway.app";
+const DEFAULT_API_BASE = "https://fabulous-gratitude-production-9d95.up.railway.app";
 const WEB_CLIENT_TYPE = "web-portal";
+
+function normalizeApiBase(value) {
+  const candidate = (value || DEFAULT_API_BASE).trim();
+  if (candidate.includes("fabulous-gratitude-production-5eb1")) {
+    return DEFAULT_API_BASE;
+  }
+  return candidate.replace(/\/+$/, "");
+}
+
+let apiBase = normalizeApiBase(
+  new URLSearchParams(window.location.search).get("api") ||
+  window.localStorage.getItem("kiwi_api_base") ||
+  DEFAULT_API_BASE
+);
+
+function getApiBase() {
+  return apiBase;
+}
+
+function saveApiBase(value) {
+  apiBase = normalizeApiBase(value);
+  window.localStorage.setItem("kiwi_api_base", apiBase);
+}
 
 async function readError(r, fallback) {
   try {
@@ -348,7 +372,7 @@ async function readError(r, fallback) {
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
-  const r = await fetch(`${API_BASE}/auth/login`, {
+  const r = await fetch(`${getApiBase()}/auth/login`, {
     method: "POST", headers: { "Content-Type": "application/json", "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
     body: JSON.stringify({ email, password })
   });
@@ -356,24 +380,24 @@ async function apiLogin(email, password) {
   return r.json();
 }
 async function apiFetchStudents(token) {
-  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  const r = await fetch(`${getApiBase()}/students`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
   if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchLiveToday(token) {
-  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  const r = await fetch(`${getApiBase()}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
   if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchExitRequests(token) {
-  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  const r = await fetch(`${getApiBase()}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
   if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchExitHistory(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
-  const r = await fetch(`${API_BASE}/attendance/exit-requests/history?${params.toString()}`, {
+  const r = await fetch(`${getApiBase()}/attendance/exit-requests/history?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
   });
   if (!r.ok) throw new Error(await readError(r, "Failed"));
@@ -382,14 +406,14 @@ async function apiFetchExitHistory(token, studentId = null, limit = 20) {
 async function apiFetchGeofenceEvents(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
-  const r = await fetch(`${API_BASE}/attendance/geofence-events?${params.toString()}`, {
+  const r = await fetch(`${getApiBase()}/attendance/geofence-events?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
   });
   if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiResolveExitRequest(token, requestId, action) {
-  const r = await fetch(`${API_BASE}/attendance/exit-requests/${requestId}/resolve`, {
+  const r = await fetch(`${getApiBase()}/attendance/exit-requests/${requestId}/resolve`, {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
     body: JSON.stringify({ action })
   });
@@ -398,7 +422,7 @@ async function apiResolveExitRequest(token, requestId, action) {
 }
 
 async function apiFetchAnalytics(token, fromDate, toDate) {
-  let url = `${API_BASE}/attendance/analytics/summary`;
+  let url = `${getApiBase()}/attendance/analytics/summary`;
   const params = [];
   if (fromDate) params.push(`from_date=${fromDate}`);
   if (toDate)   params.push(`to_date=${toDate}`);
@@ -601,12 +625,16 @@ function StudentModal({ s, rec, onClose, exitHistory = [], geofenceHistory = [],
 function LoginPage({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault(); setError(""); setLoading(true);
-    try { onLogin(await apiLogin(email, password)); }
+    try {
+      saveApiBase(apiBaseInput);
+      onLogin(await apiLogin(email, password));
+    }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -614,7 +642,7 @@ function LoginPage({ onLogin }) {
   return (
     <div className="login-wrap">
       <div className="login-left">
-        <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="BVCOE" className="brand-logo-img" />
+        <img src="https://img.icons8.com/color/96/000000/kiwi-bird.png" alt="BVCOE" className="brand-logo-img" />
         <h1>Smart Attendance</h1>
         <p>Real-time campus monitoring system for Bharati Vidyapeeth College of Engineering, Pune.</p>
       </div>
@@ -624,6 +652,10 @@ function LoginPage({ onLogin }) {
           <p className="sub">Access the live monitoring dashboard from an approved admin network. Day-to-day admin access is expected from the Android app.</p>
           {error && <div className="err-msg">⚠ {error}</div>}
           <form onSubmit={handleSubmit}>
+            <div className="input-wrap">
+              <label>Backend API</label>
+              <input type="text" value={apiBaseInput} onChange={e => setApiBaseInput(e.target.value)} placeholder="https://your-railway-domain.up.railway.app" required />
+            </div>
             <div className="input-wrap">
               <label>Administrator Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@bvucoep.edu.in" required />

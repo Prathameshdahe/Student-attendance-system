@@ -3,6 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val backendBaseUrl = (providers.gradleProperty("kiwiBackendUrl").orNull
+    ?: "https://fabulous-gratitude-production-9d95.up.railway.app/")
+    .trim()
+    .let { if (it.endsWith("/")) it else "$it/" }
+
 android {
     namespace = "com.smartattendance.smartattendance"
     compileSdk {
@@ -17,6 +22,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("String", "BACKEND_URL", "\"$backendBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,6 +41,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 }
