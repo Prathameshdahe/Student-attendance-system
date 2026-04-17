@@ -237,7 +237,7 @@ fun AdminHomeScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Use this value for ADMIN_ALLOWED_DEVICE_IDS on Railway if you want to lock admin access to this Vivo phone.",
+                        "Use this value for ADMIN_ALLOWED_DEVICE_IDS in Render if you want to lock admin access to this Vivo phone.",
                         style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
                     )
                 }

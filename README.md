@@ -1,135 +1,108 @@
 <div align="center">
   <img src="https://img.icons8.com/color/96/000000/kiwi-bird.png" width="110" alt="KIWI logo" />
   <h1>KIWI Smart Attendance</h1>
-  <p><b>Cloud-first attendance, exit control, and geofence alerting for BVCOE Pune</b></p>
+  <p><b>Render + Neon attendance, exit control, QR scanning, and geofence alerting for BVCOE Pune</b></p>
 
   ![Kotlin](https://img.shields.io/badge/Kotlin-Android-0095D5?style=for-the-badge&logo=kotlin&logoColor=white)
   ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)
-  ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Railway-336791?style=for-the-badge&logo=postgresql&logoColor=white)
+  ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?style=for-the-badge&logo=postgresql&logoColor=white)
+  ![Render](https://img.shields.io/badge/Render-Deployment-111827?style=for-the-badge&logo=render&logoColor=white)
   ![Geofencing](https://img.shields.io/badge/Geofencing-Live%20Alerts-F59E0B?style=for-the-badge)
-  ![Admin Mode](https://img.shields.io/badge/Admin-Trusted%20Device%20Ready-111827?style=for-the-badge)
 </div>
 
-## Mission
-KIWI is a production-ready smart attendance platform built around three things:
+## Overview
+KIWI is a cloud-backed smart attendance platform with four working parts:
 
-1. QR-based attendance for reliable classroom check-in and check-out.
-2. campus geofencing for live movement awareness.
-3. admin oversight through a cloud backend, Android admin app, and web dashboard.
+1. Android QR attendance for daily check-in and check-out.
+2. Student exit request workflow with admin approval and denial.
+3. Live geofence exit and return alerts for students on any network, including mobile data.
+4. Admin monitoring through both the Android admin app and the local web portal.
 
-The current campus boundary is tuned for:
-
-- `Bharati Vidyapeeth (Deemed to be University) College of Engineering, Pune`
-- Center: `18.458444, 73.855922`
-- Source reference: `18°27'30.40"N 73°51'21.32"E`
-- Active geofence radius: `325 meters`
-
----
-
-## Live Stack
 <details open>
-<summary><b>Production topology</b></summary>
+<summary><b>Production architecture</b></summary>
 
 ```mermaid
 flowchart LR
-    A["Student Android App"] --> B["FastAPI API"]
+    A["Student Android App"] --> B["FastAPI API on Render"]
     C["Admin Android App"] --> B
     D["Admin Web Portal"] --> B
-    B --> E["Railway PostgreSQL"]
+    B --> E["Neon PostgreSQL"]
     A --> F["Android Geofence + WorkManager Queue"]
     F --> B
+    G["Cloudflare DNS (optional)"] --> B
 ```
 
-- Android app: Kotlin + Compose + WorkManager + Google Play geofencing
-- Backend: FastAPI + SQLAlchemy + JWT auth
-- Database: PostgreSQL on Railway, SQLite fallback for local work
-- Admin web portal: React in a single HTML file
+- Backend host: Render
+- Database: Neon PostgreSQL
+- Mobile app: Kotlin + Compose + Retrofit + WorkManager + Play Services geofencing
+- Admin portal: React in a single HTML file, served locally by `start.ps1`
 </details>
 
 <details>
-<summary><b>What is already solved</b></summary>
+<summary><b>Current production API</b></summary>
 
-- Cloud backend is wired and can run independently of your laptop.
-- Student attendance, exit requests, and geofence events are persisted server-side.
-- Admin dashboards poll live attendance, exit decisions, and geofence alerts.
-- Android now sends richer geofence events with location, distance, device identity, and network type.
+```text
+https://kiwi-smart-attendance-api.onrender.com
+```
+
+Use this as the single backend URL until you later move to a custom Cloudflare domain.
 </details>
 
----
-
-## Trusted Admin Mode
+## Campus Geofence
 <details open>
-<summary><b>How admin access works now</b></summary>
+<summary><b>BVCOE campus boundary</b></summary>
+
+- Campus: `Bharati Vidyapeeth (Deemed to be University) College of Engineering, Pune`
+- Center: `18.458444, 73.855922`
+- Source reference: `18deg27'30.40"N 73deg51'21.32"E`
+- Active radius: `325 meters`
+</details>
+
+<details>
+<summary><b>How geofencing works now</b></summary>
+
+- The student app registers a campus geofence after login.
+- Exit and return transitions are captured through Google Play Services geofencing.
+- Events are saved locally first.
+- If the phone is offline, WorkManager retries the upload automatically.
+- If the phone is on mobile data, the upload still goes to the same Render API.
+- The backend stores the event in PostgreSQL and links it to the latest exit request when applicable.
+- The admin Android app and admin portal both poll and surface recent geofence alerts.
+</details>
+
+<details>
+<summary><b>What to grant on student phones</b></summary>
+
+- Fine location
+- Background location
+- Notifications
+- Battery optimization disabled for the app
+</details>
+
+## Admin Access Modes
+<details open>
+<summary><b>Default mode</b></summary>
+
+All login is open by default.
 
 - Students can log in from any network.
-- Admin API access is restricted to trusted admin clients by default.
-- The Android admin app identifies itself as `android-app`.
-- The web portal identifies itself as `web-portal`.
-- The admin Android app now shows a `Trusted Admin Device Key` on the home screen so you can lock admin access to your Vivo Y75 5G.
+- Admins can log in from Android or web.
+- No device or IP restriction is active until you set the `ADMIN_ALLOWED_*` variables in Render.
 </details>
 
 <details>
-<summary><b>Recommended Railway environment variables</b></summary>
+<summary><b>Recommended phone-only admin mode</b></summary>
+
+If you want admin login to be limited to your Vivo Y75 5G while students stay open everywhere:
 
 ```env
 ADMIN_ALLOWED_CLIENT_TYPES=android-app
-ADMIN_ALLOWED_DEVICE_IDS=<paste-the-device-key-shown-inside-the-admin-android-app>
-ADMIN_ALLOWED_NETWORKS=<optional-comma-separated-ip-or-cidr-list>
+ADMIN_ALLOWED_DEVICE_IDS=<trusted-device-key-from-the-admin-android-app>
+ADMIN_ALLOWED_NETWORKS=
 ```
 
-Recommended setup:
-
-- Keep `ADMIN_ALLOWED_CLIENT_TYPES=android-app` to shift admin login to the phone.
-- Add `ADMIN_ALLOWED_DEVICE_IDS` to bind admin access to the Vivo device.
-- Add `ADMIN_ALLOWED_NETWORKS` only if you also want the web portal usable from one approved network.
+This keeps student access open while locking admin access to the Android admin app on the trusted phone.
 </details>
-
-<details>
-<summary><b>Why device allowlisting is better than mobile IP locking</b></summary>
-
-- Mobile carrier IPs can change.
-- Android app device identity is far more stable for trusted-admin enforcement.
-- Network allowlisting is still supported as an extra gate for portal access.
-</details>
-
----
-
-## Geofence Behavior
-<details open>
-<summary><b>What happens when a student leaves campus</b></summary>
-
-- Android geofence detects `EXIT` or `RETURN`.
-- Event is saved locally first.
-- If the student has internet, the event is uploaded immediately.
-- If the student is offline, WorkManager retries later.
-- The backend links the event to the latest exit request, if any.
-- Admin app and admin portal show the alert on the next refresh cycle.
-</details>
-
-<details>
-<summary><b>What was fixed</b></summary>
-
-- Corrected the Android geofence center to the BVCOE coordinates above.
-- Increased the geofence radius to fit the real campus footprint instead of a tiny test circle.
-- Added proper background-location gating so monitoring is not limited to foreground usage.
-- Fixed the worker upload contract so queued geofence events hit a real backend endpoint.
-- Added network type, approximate boundary distance, and device ID to stored geofence alerts.
-- Added alert surfacing for fresh exit events in both admin interfaces.
-- Added boot re-registration so student geofencing recovers after restart or app update.
-</details>
-
-<details>
-<summary><b>Personal network / mobile data support</b></summary>
-
-Students do not need to stay on college Wi-Fi. If a student leaves campus while on personal mobile data, the phone still:
-
-- triggers the geofence exit
-- stores the event locally first
-- uploads it to the backend when connectivity is available
-- makes it visible to admin through the portal or admin application
-</details>
-
----
 
 ## Quick Start
 <details open>
@@ -139,111 +112,78 @@ Students do not need to stay on college Wi-Fi. If a student leaves campus while 
 .\start.ps1
 ```
 
-The portal opens locally but talks to the cloud backend.
+Open:
+
+```text
+http://localhost:8080
+```
+
+The portal is local, but all data comes from the Render backend.
 </details>
 
 <details open>
 <summary><b>Run the Android app</b></summary>
 
-1. Open `frontend` in Android Studio.
-2. Connect the physical Android device.
-3. Grant:
-   - fine location
-   - background location
-   - notifications
-4. Press `Run`.
-5. Log in as student or admin depending on the flow you want to test.
+1. Open [build.gradle.kts](/C:/Users/DELL/Desktop/smartattendance/frontend/app/build.gradle.kts) in Android Studio.
+2. Connect a physical Android device.
+3. Build and install the debug app.
+4. Grant the required permissions.
+5. Log in as student or admin.
 </details>
 
 <details>
-<summary><b>Admin phone setup checklist</b></summary>
+<summary><b>Deploy or redeploy the backend</b></summary>
 
-1. Install and run the Android app on the Vivo Y75 5G.
-2. Log in as admin from the phone.
-3. Open the admin home screen and copy the `Trusted Admin Device Key`.
-4. Add that value to `ADMIN_ALLOWED_DEVICE_IDS` in Railway.
-5. Redeploy Railway.
-6. Test admin login again from the Vivo phone and confirm the web portal is blocked unless its network is allowlisted.
+See [RENDER_SETUP.md](/C:/Users/DELL/Desktop/smartattendance/RENDER_SETUP.md) for the clean Render + Neon workflow.
 </details>
 
----
-
-## Project Map
-<details>
-<summary><b>Repository layout</b></summary>
-
-```text
-smartattendance/
-├─ backend/              FastAPI API, auth, attendance, exit requests, geofence storage
-├─ frontend/             Android app (student + admin)
-├─ admin-portal/         React admin dashboard in a single HTML entry
-├─ start.ps1             Quick portal launcher
-└─ README.md             This file
-```
-</details>
-
-<details>
-<summary><b>Key files for the current flow</b></summary>
-
-- `backend/app/routers/auth.py`
-- `backend/app/routers/attendance.py`
-- `backend/app/core/access_policy.py`
-- `frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceManager.kt`
-- `frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceBroadcastReceiver.kt`
-- `frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceUploadWorker.kt`
-- `frontend/app/src/main/java/com/smartattendance/smartattendance/ui/screens/AdminHomeScreen.kt`
-- `admin-portal/index.html`
-</details>
-
----
-
-## Security Notes
+## Key Files
 <details open>
-<summary><b>Important</b></summary>
+<summary><b>Main runtime files</b></summary>
 
-- Do not publish real admin or student credentials in the README.
-- Use Railway environment variables for admin access policy.
-- The trusted-device pattern is intended to protect admin routes without restricting students.
-- JWT auth still applies to all authenticated actions.
+- [main.py](/C:/Users/DELL/Desktop/smartattendance/backend/app/main.py)
+- [auth.py](/C:/Users/DELL/Desktop/smartattendance/backend/app/routers/auth.py)
+- [attendance.py](/C:/Users/DELL/Desktop/smartattendance/backend/app/routers/attendance.py)
+- [access_policy.py](/C:/Users/DELL/Desktop/smartattendance/backend/app/core/access_policy.py)
+- [ApiClient.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/data/remote/ApiClient.kt)
+- [GeofenceManager.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceManager.kt)
+- [GeofenceBroadcastReceiver.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceBroadcastReceiver.kt)
+- [GeofenceUploadWorker.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/service/GeofenceUploadWorker.kt)
+- [AdminHomeScreen.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/ui/screens/AdminHomeScreen.kt)
+- [StudentHomeScreen.kt](/C:/Users/DELL/Desktop/smartattendance/frontend/app/src/main/java/com/smartattendance/smartattendance/ui/screens/StudentHomeScreen.kt)
+- [index.html](/C:/Users/DELL/Desktop/smartattendance/admin-portal/index.html)
+- [render.yaml](/C:/Users/DELL/Desktop/smartattendance/render.yaml)
 </details>
-
----
 
 ## Troubleshooting
 <details>
-<summary><b>Geofence still does not trigger</b></summary>
+<summary><b>Admin portal cannot log in</b></summary>
 
-Check the phone for:
-
-- location turned on
-- background location granted
-- battery optimization disabled for the app
-- notifications allowed
-- Google Play Services location working normally
+- Run the portal through `http://localhost:8080`, not `file:///...`.
+- Confirm the Render backend URL is reachable.
+- If admin restrictions are enabled, make sure `web-portal` is allowed.
 </details>
 
 <details>
-<summary><b>Admin portal says access is restricted</b></summary>
+<summary><b>Android geofence does not alert</b></summary>
 
-That means the backend rejected the `web-portal` client. Either:
-
-- continue using the Android admin app, or
-- add the portal network to `ADMIN_ALLOWED_NETWORKS`
+- Confirm location services are on.
+- Confirm background location is granted.
+- Confirm the student account is logged in.
+- Confirm the app is not battery-restricted.
+- Confirm the backend is reachable from the phone's current network.
 </details>
 
 <details>
-<summary><b>Student left campus but admin sees nothing</b></summary>
+<summary><b>Students leave campus but admin sees nothing</b></summary>
 
-Verify:
-
-- the student phone had geofence permissions
-- the event reached `/attendance/geofence-events`
-- the admin app or portal refreshed after the event
+- Verify the student phone recorded an `EXIT` event.
+- Verify the phone later uploaded the queued event.
+- Check [attendance.py](/C:/Users/DELL/Desktop/smartattendance/backend/app/routers/attendance.py) for the `geofence-events` endpoints.
+- Refresh the admin app or portal after the event reaches the backend.
 </details>
-
----
 
 <div align="center">
   <b>Built for BVCOE Pune.</b><br/>
-  <sub>Attendance, exit control, and geofence visibility in one stack.</sub>
+  <sub>Attendance, QR, exit control, and geofence visibility in one clean Render-based stack.</sub>
 </div>

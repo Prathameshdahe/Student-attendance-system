@@ -4,7 +4,7 @@ plugins {
 }
 
 val backendBaseUrl = (providers.gradleProperty("kiwiBackendUrl").orNull
-    ?: "https://fabulous-gratitude-production-9d95.up.railway.app/")
+    ?: "https://kiwi-smart-attendance-api.onrender.com/")
     .trim()
     .let { if (it.endsWith("/")) it else "$it/" }
 

@@ -5,11 +5,11 @@ Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Starting local web server for Admin Portal..." -ForegroundColor Yellow
 Write-Host "(This fixes browser security restrictions on file:// URLs)" -ForegroundColor DarkGray
-Write-Host "Configured Railway backend: https://fabulous-gratitude-production-9d95.up.railway.app" -ForegroundColor Cyan
+Write-Host "Configured Render backend: https://kiwi-smart-attendance-api.onrender.com" -ForegroundColor Cyan
 Write-Host ""
 
-# Kill any existing Python servers on port 8080 or 8081
-$existing = Get-NetTCPConnection -LocalPort 8080,8081 -ErrorAction SilentlyContinue
+# Kill any existing Python servers on port 8080
+$existing = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
 if ($existing) {
     foreach ($conn in $existing) {
         $pid = $conn.OwningProcess
@@ -17,11 +17,6 @@ if ($existing) {
     }
     Start-Sleep -Seconds 1
 }
-
-# Start the local DNS bypass proxy
-$proxyCmd = "-NoExit -Command `"cd '$PSScriptRoot'; python proxy.py 8081`""
-Start-Process powershell -ArgumentList $proxyCmd -WindowStyle Minimized
-Start-Sleep -Seconds 1
 
 # Start a local HTTP server in the admin-portal directory in the background
 $serverCmd = "-NoExit -Command `"cd '$PSScriptRoot\admin-portal'; python -m http.server 8080`""
@@ -35,6 +30,7 @@ Start-Process "http://localhost:8080"
 
 Write-Host ""
 Write-Host "Admin portal is live at: http://localhost:8080" -ForegroundColor Green
+Write-Host "Connected API: https://kiwi-smart-attendance-api.onrender.com" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Login credentials:" -ForegroundColor White
 Write-Host "  Email:    admin@bvucoep.edu.in" -ForegroundColor Gray

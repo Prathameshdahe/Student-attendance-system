@@ -16,3 +16,7 @@ app/build/
 
 # DB
 *.db
+
+# Local environment files
+.env
+backend/.env

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Attendance — BVCOE Admin</title>
 <meta name="description" content="Real-time campus attendance monitoring dashboard for Bharati Vidyapeeth College of Engineering, Pune." />
+<link rel="icon" type="image/png" href="logo_crest.png" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -334,56 +335,77 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8081";
+const API_BASE = "https://kiwi-smart-attendance-api.onrender.com";
+const WEB_PORTAL_HEADERS = {
+  "X-KIWI-Client-Type": "web-portal",
+  "X-KIWI-Device-ID": "admin-portal-browser"
+};
+
+function portalHeaders(token = null, extra = {}) {
+  const headers = { ...WEB_PORTAL_HEADERS, ...extra };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+async function readApiError(response, fallback) {
+  try {
+    const payload = await response.json();
+    return payload?.detail || payload?.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
   const r = await fetch(`${API_BASE}/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST",
+    headers: portalHeaders(null, { "Content-Type": "application/json" }),
     body: JSON.stringify({ email, password })
   });
-  if (!r.ok) throw new Error("Invalid credentials");
+  if (!r.ok) throw new Error(await readApiError(r, "Could not sign in to the Render API."));
   return r.json();
 }
 async function apiFetchStudents(token) {
-  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/students`, { headers: portalHeaders(token) });
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to load students"));
   return r.json();
 }
 async function apiFetchLiveToday(token) {
-  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: portalHeaders(token) });
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to load live attendance"));
   return r.json();
 }
 async function apiFetchExitRequests(token) {
-  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: portalHeaders(token) });
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to load pending exit requests"));
   return r.json();
 }
 async function apiFetchExitHistory(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
   const r = await fetch(`${API_BASE}/attendance/exit-requests/history?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: portalHeaders(token)
   });
-  if (!r.ok) throw new Error("Failed");
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to load exit history"));
   return r.json();
 }
 async function apiFetchGeofenceEvents(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
   const r = await fetch(`${API_BASE}/attendance/geofence-events?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: portalHeaders(token)
   });
-  if (!r.ok) throw new Error("Failed");
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to load geofence alerts"));
   return r.json();
 }
 async function apiResolveExitRequest(token, requestId, action) {
   const r = await fetch(`${API_BASE}/attendance/exit-requests/${requestId}/resolve`, {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    method: "POST",
+    headers: portalHeaders(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ action })
   });
-  if (!r.ok) throw new Error("Failed to resolve exit request");
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to resolve exit request"));
   return await r.json();
 }
 
@@ -393,8 +415,8 @@ async function apiFetchAnalytics(token, fromDate, toDate) {
   if (fromDate) params.push(`from_date=${fromDate}`);
   if (toDate)   params.push(`to_date=${toDate}`);
   if (params.length) url += '?' + params.join('&');
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed to fetch analytics");
+  const r = await fetch(url, { headers: portalHeaders(token) });
+  if (!r.ok) throw new Error(await readApiError(r, "Failed to fetch analytics"));
   return await r.json();
 }
 

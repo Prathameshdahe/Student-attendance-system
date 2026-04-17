@@ -1,15 +1,15 @@
 """
-access_policy.py — Admin access guard.
+Admin access guard for the deployed backend.
 
-By default ALL access is OPEN so students and admins can log in from any device
-or network without any configuration.
+By default all access is open so students and admins can log in from any device
+or network without any extra configuration.
 
-To activate restrictions, set these Railway environment variables:
-  ADMIN_ALLOWED_CLIENT_TYPES  → comma-separated list e.g. "android-app,web-portal"
-  ADMIN_ALLOWED_NETWORKS      → comma-separated CIDRs  e.g. "192.168.1.0/24"
-  ADMIN_ALLOWED_DEVICE_IDS    → comma-separated device IDs from the Android admin app
+To activate restrictions, set these Render environment variables:
+  ADMIN_ALLOWED_CLIENT_TYPES  -> comma-separated list, e.g. "android-app,web-portal"
+  ADMIN_ALLOWED_NETWORKS      -> comma-separated CIDRs, e.g. "192.168.1.0/24"
+  ADMIN_ALLOWED_DEVICE_IDS    -> comma-separated device IDs from the Android admin app
 
-Leave ALL of them unset (the default) to allow unrestricted login from anywhere.
+Leave all three unset to allow unrestricted login from anywhere.
 """
 
 import ipaddress
@@ -44,27 +44,24 @@ def _parse_networks(values: list[str]) -> list:
 
 def enforce_admin_access(request: Request, user: User) -> None:
     """
-    Enforces access policy for ADMIN users only.
+    Enforce access policy for admin users only.
     Students always pass through freely.
 
-    If NO environment variables are configured → OPEN (anyone can log in).
-    Configure variables on Railway to lock down admin access.
+    If no environment variables are configured, the backend stays open.
+    Set the Render environment only when you want to lock down admin access.
     """
     if user.role != "ADMIN":
-        # Students are never restricted
         return
 
     allowed_networks = _parse_networks(_parse_csv_env("ADMIN_ALLOWED_NETWORKS"))
     allowed_device_ids = set(_parse_csv_env("ADMIN_ALLOWED_DEVICE_IDS"))
     allowed_client_types = set(
-        t.lower() for t in _parse_csv_env("ADMIN_ALLOWED_CLIENT_TYPES")
+        value.lower() for value in _parse_csv_env("ADMIN_ALLOWED_CLIENT_TYPES")
     )
 
-    # If no restrictions are configured at all → open access for admins too
     if not allowed_networks and not allowed_device_ids and not allowed_client_types:
         return
 
-    # ── network allowlist check ──────────────────────────────────────────────
     forwarded_for = request.headers.get("x-forwarded-for", "")
     client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (
         request.client.host if request.client else None
@@ -77,7 +74,6 @@ def enforce_admin_access(request: Request, user: User) -> None:
         except ValueError:
             pass
 
-    # ── client-type allowlist check ──────────────────────────────────────────
     client_type = request.headers.get("X-KIWI-Client-Type", "").strip().lower()
     if allowed_client_types:
         if "*" in allowed_client_types or client_type in allowed_client_types:
@@ -87,11 +83,10 @@ def enforce_admin_access(request: Request, user: User) -> None:
             detail=(
                 f"Admin access is restricted. Client '{client_type}' is not in the "
                 f"allowed list: {', '.join(sorted(allowed_client_types))}. "
-                "Set ADMIN_ALLOWED_CLIENT_TYPES on Railway to adjust."
+                "Set ADMIN_ALLOWED_CLIENT_TYPES in Render to adjust."
             ),
         )
 
-    # ── device-ID allowlist check ────────────────────────────────────────────
     device_id = request.headers.get("X-KIWI-Device-ID", "").strip()
     if allowed_device_ids:
         if device_id in allowed_device_ids:
