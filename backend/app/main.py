@@ -20,6 +20,33 @@ try:
             name="KIWI Admin", role="ADMIN", is_active=True
         ))
         db.commit()
+
+    # Bootstrap dummy students
+    STUDENTS = [
+        {"first": "Prathamesh", "last": "Dahe", "roll": "110", "email": "padahe23-comp@bvucoep.edu.in", "division": "A", "prn": "2314110215", "mobile": "6239951476", "class_name": "comp-2"},
+        {"first": "Manamrit", "last": "Singh", "roll": "104", "email": "msingh23-comp@bvucoep.edu.in", "division": "B", "prn": "2314110207", "mobile": "8826611487", "class_name": "comp-2"},
+        {"first": "Harsh Kumar", "last": "Pal", "roll": "99", "email": "hkpal2-comp@bvucoep.edu.in", "division": "A", "prn": "2314110203", "mobile": None, "class_name": "comp-2"},
+        {"first": "Anushka", "last": "Srivastava", "roll": "91", "email": "srianushka1976@gmail.com", "division": "B", "prn": "2314110195", "mobile": None, "class_name": "comp-2"},
+    ]
+    student_pw = hash_password("Student@1234")
+    for s_data in STUDENTS:
+        if not db.query(User).filter_by(email=s_data["email"]).first():
+            student = User(
+                id=str(uuid.uuid4()),
+                email=s_data["email"],
+                hashed_password=student_pw,
+                name=f"{s_data['first']} {s_data['last']}",
+                role="STUDENT",
+                is_active=True,
+                roll_number=s_data["roll"],
+                division=s_data["division"],
+                prn=s_data["prn"],
+                mobile_number=s_data["mobile"],
+                class_name=s_data["class_name"]
+            )
+            db.add(student)
+    db.commit()
+
 except Exception:
     pass
 finally:
