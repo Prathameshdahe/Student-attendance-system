@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import com.smartattendance.smartattendance.data.local.DeviceIdentity
 import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.remote.ExitRequestDto
 import com.smartattendance.smartattendance.data.remote.GeofenceEventDto
@@ -53,6 +55,7 @@ fun AdminHomeScreen(
     val todayDisplay = SimpleDateFormat("EEEE, dd MMM", Locale.getDefault()).format(Date())
 
     var adminName by remember { mutableStateOf("...") }
+    val adminDeviceId = remember(context) { DeviceIdentity.getDeviceId(context) }
     val repo = remember(context) { AttendanceRepository(context) }
     var activityLog by remember { mutableStateOf<List<ActivityLogItem>>(emptyList()) }
     var pendingRequests by remember { mutableStateOf<List<ExitRequestDto>>(emptyList()) }
@@ -60,6 +63,7 @@ fun AdminHomeScreen(
     var geofenceEvents by remember { mutableStateOf<List<GeofenceEventDto>>(emptyList()) }
     var isRefreshing by remember { mutableStateOf(true) }
     var resolvingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var lastSeenGeofenceId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect("fetchAdmin") {
         adminName = withContext(Dispatchers.IO) {
             SessionManager(context).getUserName() ?: "Admin"
@@ -71,7 +75,17 @@ fun AdminHomeScreen(
         val live = repo.getLiveAttendanceToday().getOrNull().orEmpty()
         pendingRequests = repo.getPendingExitRequests().getOrNull().orEmpty()
         requestHistory = repo.getExitRequestHistory().getOrNull().orEmpty()
-        geofenceEvents = repo.getGeofenceEvents().getOrNull().orEmpty()
+        val latestGeofenceEvents = repo.getGeofenceEvents().getOrNull().orEmpty()
+        val newestExit = latestGeofenceEvents.firstOrNull { it.event_type == "EXIT" }
+        if (lastSeenGeofenceId != null && newestExit != null && newestExit.id != lastSeenGeofenceId) {
+            Toast.makeText(
+                context,
+                "Campus exit alert: ${newestExit.name ?: "Student"} left the geofence",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        lastSeenGeofenceId = newestExit?.id ?: lastSeenGeofenceId
+        geofenceEvents = latestGeofenceEvents
         activityLog = live.map { record ->
             ActivityLogItem(
                 studentName = record.name,
@@ -200,8 +214,33 @@ fun AdminHomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 KiwiStatCard("Present", "${activityLog.count { it.action == "On Campus" }}", Modifier.weight(1f))
-                KiwiStatCard("Absent", "—", Modifier.weight(1f))
+                KiwiStatCard("Alerts", "${geofenceEvents.count { it.event_type == "EXIT" }}", Modifier.weight(1f))
                 KiwiStatCard("Scanned", "${activityLog.size}", Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    Text("Trusted Admin Device Key", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        adminDeviceId,
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Use this value for ADMIN_ALLOWED_DEVICE_IDS on Railway if you want to lock admin access to this Vivo phone.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
             }
 
             Spacer(Modifier.height(20.dp))
@@ -431,7 +470,7 @@ fun GeofenceAlertCard(event: GeofenceEventDto) {
             Surface(shape = CircleShape, color = if (event.event_type == "EXIT") Color(0xFFFEF3C7) else Color(0xFFE0E7FF), modifier = Modifier.size(40.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        if (event.event_type == "EXIT") Icons.Filled.DirectionsWalk else Icons.Filled.LocationOn,
+                        if (event.event_type == "EXIT") Icons.AutoMirrored.Filled.DirectionsWalk else Icons.Filled.LocationOn,
                         null,
                         tint = if (event.event_type == "EXIT") Color(0xFFF59E0B) else Color(0xFF6366F1),
                         modifier = Modifier.size(20.dp)
@@ -442,6 +481,16 @@ fun GeofenceAlertCard(event: GeofenceEventDto) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(event.name ?: "Student", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                 Text(event.note ?: event.event_type, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+                val metaParts = buildList {
+                    event.network_type?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    event.distance_from_center_meters?.let { add("${it.toInt()} m from center") }
+                }
+                if (metaParts.isNotEmpty()) {
+                    Text(
+                        metaParts.joinToString(" • "),
+                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    )
+                }
             }
             Text(event.time ?: "--", style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
         }

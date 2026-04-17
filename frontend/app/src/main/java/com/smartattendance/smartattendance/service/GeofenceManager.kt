@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.google.android.gms.location.Geofence
@@ -15,21 +16,26 @@ class GeofenceManager(private val context: Context) {
 
     companion object {
         const val GEOFENCE_ID = "COLLEGE_CAMPUS"
-        // Temporary test coordinates (18°27'35.27"N 73°50'57.46"E)
-        const val COLLEGE_LAT = 18.459797
-        const val COLLEGE_LNG = 73.849294
-        const val GEOFENCE_RADIUS = 100f // 100 meters buffer for testing
+        const val COLLEGE_LAT = 18.458444
+        const val COLLEGE_LNG = 73.855922
+        const val GEOFENCE_RADIUS = 325f
     }
 
     private val geofencingClient = LocationServices.getGeofencingClient(context)
 
     fun startGeofencing() {
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
+        if (
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
         ) {
-            Log.e("Geofence", "Permission not granted.")
+            Log.e("Geofence", "Fine location permission not granted.")
+            return
+        }
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e("Geofence", "Background location permission not granted.")
             return
         }
 
@@ -39,22 +45,22 @@ class GeofenceManager(private val context: Context) {
             .setExpirationDuration(Geofence.NEVER_EXPIRE)
             .setTransitionTypes(
                 Geofence.GEOFENCE_TRANSITION_EXIT or
-                Geofence.GEOFENCE_TRANSITION_ENTER
+                    Geofence.GEOFENCE_TRANSITION_ENTER
             )
-            .setLoiteringDelay(30000) // 30 sec buffer before triggering exit to prevent GPS bounce
+            .setNotificationResponsiveness(60_000)
             .build()
 
         val request = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_DWELL or GeofencingRequest.INITIAL_TRIGGER_ENTER)
+            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
             .addGeofence(geofence)
             .build()
 
         geofencingClient.addGeofences(request, getGeofencePendingIntent())
             .addOnSuccessListener {
-                Log.d("Geofence", "Geo-fence registered successfully around BVCOE.")
+                Log.d("Geofence", "BVCOE campus geofence registered successfully.")
             }
             .addOnFailureListener { e ->
-                Log.e("Geofence", "Geo-fence failed: ${e.message}")
+                Log.e("Geofence", "Geofence registration failed: ${e.message}")
             }
     }
 

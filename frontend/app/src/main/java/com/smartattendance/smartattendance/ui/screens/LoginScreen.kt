@@ -256,13 +256,17 @@ fun LoginScreen(
                                 }
                             },
                             onFailure = { e ->
+                                val message = e.message.orEmpty()
                                 errorMsg = when {
-                                    e.message?.contains("401") == true -> "Invalid email or password."
-                                    e.message?.contains("connect") == true ||
-                                    e.message?.contains("timeout") == true ||
-                                    e.message?.contains("Unable to resolve") == true ->
+                                    message.contains("Invalid email or password", ignoreCase = true) ||
+                                    message.contains("401") -> "Invalid email or password."
+                                    message.contains("Admin access is restricted", ignoreCase = true) ||
+                                    message.contains("trusted devices", ignoreCase = true) -> message
+                                    message.contains("connect", ignoreCase = true) ||
+                                    message.contains("timeout", ignoreCase = true) ||
+                                    message.contains("Unable to resolve", ignoreCase = true) ->
                                         "Cannot reach server. Check your WiFi connection."
-                                    else -> "Login failed. Please try again."
+                                    else -> message.ifBlank { "Login failed. Please try again." }
                                 }
                             }
                         )

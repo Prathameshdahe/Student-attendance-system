@@ -1,6 +1,7 @@
 from datetime import date as dt_date, datetime, timedelta
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
@@ -120,6 +121,12 @@ def serialize_geofence_event(
         "note": note,
         "time": format_dt(event.created_at),
         "date": event.created_at.strftime("%Y-%m-%d") if event.created_at else None,
+        "device_id": event.device_id,
+        "network_type": event.network_type,
+        "latitude": event.latitude,
+        "longitude": event.longitude,
+        "accuracy_meters": event.accuracy_meters,
+        "distance_from_center_meters": event.distance_from_center_meters,
         "created_at": event.created_at.isoformat() if event.created_at else None,
     }
 
@@ -254,33 +261,69 @@ def scan_qr(
 
 class GeofenceRequest(BaseModel):
     type: str
+    timestamp: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    accuracy_meters: float | None = None
+    distance_from_center_meters: float | None = None
+    device_id: str | None = None
+    network_type: str | None = None
 
 
-@router.post("/geofence-alert")
-def geofence_alert(
-    req: GeofenceRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Student-only: Persist a geofence exit/return event."""
-    if current_user.role != "STUDENT":
-        raise HTTPException(status_code=403, detail="Student access required")
+class GeofenceEventUpload(BaseModel):
+    type: str | None = None
+    transition_type: str | None = None
+    timestamp: int | None = None
+    date: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    accuracy_meters: float | None = None
+    distance_from_center_meters: float | None = None
+    device_id: str | None = None
+    network_type: str | None = None
 
-    event_map = {
-        "UNAUTHORIZED_EXIT": "EXIT",
-        "RETURN_TO_CAMPUS": "RETURN",
+
+def normalize_geofence_transition(raw_type: str | None) -> tuple[str, str]:
+    value = (raw_type or "").strip().upper()
+    mapping = {
+        "UNAUTHORIZED_EXIT": ("EXIT", "UNAUTHORIZED_EXIT"),
+        "EXIT": ("EXIT", "UNAUTHORIZED_EXIT"),
+        "RETURN_TO_CAMPUS": ("RETURN", "RETURN_TO_CAMPUS"),
+        "RETURN": ("RETURN", "RETURN_TO_CAMPUS"),
+        "ENTER": ("RETURN", "RETURN_TO_CAMPUS"),
     }
-    event_type = event_map.get(req.type)
-    if not event_type:
+    if value not in mapping:
         raise HTTPException(status_code=400, detail="Invalid geofence event type")
+    return mapping[value]
 
-    now_utc = datetime.utcnow()
+
+def geofence_event_time(timestamp_ms: int | None) -> datetime:
+    if not timestamp_ms:
+        return datetime.utcnow()
+    return datetime.utcfromtimestamp(timestamp_ms / 1000)
+
+
+def persist_geofence_event(
+    *,
+    db: Session,
+    current_user: User,
+    transition_type: str,
+    event_time: datetime,
+    device_id: str | None,
+    network_type: str | None,
+    latitude: float | None,
+    longitude: float | None,
+    accuracy_meters: float | None,
+    distance_from_center_meters: float | None,
+) -> dict[str, Any]:
+    event_type, source_type = normalize_geofence_transition(transition_type)
     recent_duplicate = (
         db.query(GeofenceEvent)
         .filter(
             GeofenceEvent.student_id == current_user.id,
             GeofenceEvent.event_type == event_type,
-            GeofenceEvent.created_at >= now_utc - timedelta(seconds=90),
+            GeofenceEvent.created_at >= event_time - timedelta(seconds=90),
+            GeofenceEvent.created_at <= event_time + timedelta(seconds=90),
         )
         .order_by(GeofenceEvent.created_at.desc())
         .first()
@@ -297,26 +340,84 @@ def geofence_alert(
     permission_status = normalize_exit_status(latest_request.status) if latest_request else "NONE"
 
     if latest_request and event_type == "EXIT" and permission_status == "APPROVED" and not latest_request.left_campus_at:
-        latest_request.left_campus_at = now_utc
+        latest_request.left_campus_at = event_time
     if latest_request and event_type == "RETURN" and latest_request.left_campus_at and not latest_request.returned_campus_at:
-        latest_request.returned_campus_at = now_utc
+        latest_request.returned_campus_at = event_time
 
     event = GeofenceEvent(
         student_id=current_user.id,
         request_id=latest_request.id if latest_request else None,
         event_type=event_type,
         permission_status=permission_status,
-        source_type=req.type,
+        source_type=source_type,
         note=geofence_note(event_type, permission_status, latest_request.reason if latest_request else None),
+        device_id=device_id,
+        network_type=network_type,
+        latitude=latitude,
+        longitude=longitude,
+        accuracy_meters=accuracy_meters,
+        distance_from_center_meters=distance_from_center_meters,
+        created_at=event_time,
     )
     db.add(event)
     db.commit()
+    db.refresh(event)
 
     return {
         "status": "SUCCESS",
         "message": event.note,
         "event": serialize_geofence_event(event, current_user, latest_request),
     }
+
+
+@router.post("/geofence-alert")
+def geofence_alert(
+    req: GeofenceRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Student-only: Persist a geofence exit/return event."""
+    if current_user.role != "STUDENT":
+        raise HTTPException(status_code=403, detail="Student access required")
+    return persist_geofence_event(
+        db=db,
+        current_user=current_user,
+        transition_type=req.type,
+        event_time=geofence_event_time(req.timestamp),
+        device_id=req.device_id or request.headers.get("X-KIWI-Device-ID"),
+        network_type=req.network_type,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        accuracy_meters=req.accuracy_meters,
+        distance_from_center_meters=req.distance_from_center_meters,
+    )
+
+
+@router.post("/geofence-events")
+def geofence_event_upload(
+    req: GeofenceEventUpload,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Student-only: Accept queued mobile geofence uploads."""
+    if current_user.role != "STUDENT":
+        raise HTTPException(status_code=403, detail="Student access required")
+
+    transition_type = req.type or req.transition_type
+    return persist_geofence_event(
+        db=db,
+        current_user=current_user,
+        transition_type=transition_type,
+        event_time=geofence_event_time(req.timestamp),
+        device_id=req.device_id or request.headers.get("X-KIWI-Device-ID"),
+        network_type=req.network_type,
+        latitude=req.latitude,
+        longitude=req.longitude,
+        accuracy_meters=req.accuracy_meters,
+        distance_from_center_meters=req.distance_from_center_meters,
+    )
 
 
 class SubmitExitRequest(BaseModel):

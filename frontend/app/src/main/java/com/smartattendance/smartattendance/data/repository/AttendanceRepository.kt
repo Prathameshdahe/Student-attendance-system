@@ -1,6 +1,7 @@
 package com.smartattendance.smartattendance.data.repository
 
 import android.content.Context
+import com.smartattendance.smartattendance.data.local.DeviceIdentity
 import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.model.Attendance
 import com.smartattendance.smartattendance.data.model.User
@@ -23,6 +24,8 @@ import java.util.Locale
 class AttendanceRepository(context: Context) {
 
     private val session = SessionManager(context)
+    private val deviceId = DeviceIdentity.getDeviceId(context)
+    private val clientType = "android-app"
 
     private val todayDate: String
         get() = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
@@ -43,7 +46,7 @@ class AttendanceRepository(context: Context) {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
             val adminId = getCurrentUserId()
             val request = ScanRequest(qr_payload = qrPayload, scanned_by = adminId)
-            Result.success(ApiClient.api.scanQr("Bearer $token", request))
+            Result.success(ApiClient.api.scanQr("Bearer $token", clientType, deviceId, request))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -52,7 +55,14 @@ class AttendanceRepository(context: Context) {
     suspend fun sendGeofenceAlert(type: String): Result<GeofenceResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.sendGeofenceAlert("Bearer $token", GeofenceRequest(type)))
+            Result.success(
+                ApiClient.api.sendGeofenceAlert(
+                    "Bearer $token",
+                    clientType,
+                    deviceId,
+                    GeofenceRequest(type = type, device_id = deviceId)
+                )
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -61,7 +71,7 @@ class AttendanceRepository(context: Context) {
     suspend fun submitExitRequest(reason: String): Result<ExitResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.submitExitRequest("Bearer $token", ExitRequest(reason)))
+            Result.success(ApiClient.api.submitExitRequest("Bearer $token", clientType, deviceId, ExitRequest(reason)))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -70,7 +80,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getMyHistory(): Result<List<HistoryRecord>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getMyHistory("Bearer $token"))
+            Result.success(ApiClient.api.getMyHistory("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -79,7 +89,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getLiveAttendanceToday(): Result<List<LiveAttendanceDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getLiveAttendanceToday("Bearer $token"))
+            Result.success(ApiClient.api.getLiveAttendanceToday("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -88,7 +98,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getPendingExitRequests(): Result<List<ExitRequestDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getPendingExitRequests("Bearer $token"))
+            Result.success(ApiClient.api.getPendingExitRequests("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -97,7 +107,15 @@ class AttendanceRepository(context: Context) {
     suspend fun resolveExitRequest(reqId: String, action: String): Result<ExitResponse> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.resolveExitRequest("Bearer $token", reqId, ResolveActionRequest(action)))
+            Result.success(
+                ApiClient.api.resolveExitRequest(
+                    "Bearer $token",
+                    clientType,
+                    deviceId,
+                    reqId,
+                    ResolveActionRequest(action)
+                )
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -106,7 +124,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getMyExitRequests(): Result<List<ExitRequestDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getMyExitRequests("Bearer $token"))
+            Result.success(ApiClient.api.getMyExitRequests("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -115,7 +133,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getExitRequestHistory(): Result<List<ExitRequestDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getExitRequestHistory("Bearer $token"))
+            Result.success(ApiClient.api.getExitRequestHistory("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -124,7 +142,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getGeofenceEvents(): Result<List<GeofenceEventDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getGeofenceEvents("Bearer $token"))
+            Result.success(ApiClient.api.getGeofenceEvents("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -133,7 +151,7 @@ class AttendanceRepository(context: Context) {
     suspend fun getMyGeofenceEvents(): Result<List<GeofenceEventDto>> {
         return try {
             val token = session.getToken() ?: return Result.failure(Exception("Unauthorized"))
-            Result.success(ApiClient.api.getMyGeofenceEvents("Bearer $token"))
+            Result.success(ApiClient.api.getMyGeofenceEvents("Bearer $token", clientType, deviceId))
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -1,15 +1,23 @@
-# KIWI Smart Attendance - Startup Script
-Write-Host "Starting KIWI Backend Server..." -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "    KIWI Smart Attendance Dashboard       " -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Cloud backend target: Railway production" -ForegroundColor Magenta
+Write-Host "Admin portal client type: web-portal" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "If admin login is restricted, use the Android admin app or allowlist this network in Railway." -ForegroundColor White
+Write-Host ""
+Write-Host "Opening the local admin portal..." -ForegroundColor Green
 
-# Start the FastAPI server in a new PowerShell window
-$backendCmd = "-NoExit -Command `"cd backend; .\venv\Scripts\activate; uvicorn app.main:app --host 0.0.0.0 --port 8000`""
-Start-Process powershell -ArgumentList $backendCmd
-
-Write-Host "Opening KIWI Admin Portal..." -ForegroundColor Green
-Start-Sleep -Seconds 3
-
-# Open the HTML file in the default web browser (Chrome/Edge)
 $htmlPath = Join-Path (Get-Location) "admin-portal\index.html"
 Start-Process $htmlPath
 
-Write-Host "Done! The server is running in the background." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Testing reminders:" -ForegroundColor White
+Write-Host "1. Student phone needs fine + background location permissions." -ForegroundColor Gray
+Write-Host "2. Admin phone shows the Trusted Admin Device Key inside the app." -ForegroundColor Gray
+Write-Host "3. Geofence alerts appear in the admin app and portal after refresh." -ForegroundColor Gray
+Write-Host ""
+Write-Host "Closing window in 10 seconds..." -ForegroundColor DarkGray
+
+Start-Sleep -Seconds 10

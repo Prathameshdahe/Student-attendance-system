@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -23,8 +24,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PendingActions
 import androidx.compose.material.icons.filled.LocationOn
@@ -77,14 +78,33 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
     var isSubmitting by remember { mutableStateOf(false) }
     var showSuccess by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        geofenceEnabled = hasLocationPermission(context) && hasBackgroundLocationPermission(context)
+        if (granted && geofenceEnabled) {
+            geofenceManager.startGeofencing()
+        }
+    }
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        geofenceEnabled =
+        val hasForeground =
             permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (geofenceEnabled) {
-            geofenceManager.startGeofencing()
+
+        if (hasForeground) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasBackgroundLocationPermission(context)) {
+                backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            } else {
+                geofenceEnabled = true
+                geofenceManager.startGeofencing()
+            }
+        } else {
+            geofenceEnabled = false
         }
     }
 
@@ -101,18 +121,18 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
     )
 
     LaunchedEffect(Unit) {
-        val (name, token, hasLocationPermission) = withContext(Dispatchers.IO) {
+        val (name, token, permissionsReady) = withContext(Dispatchers.IO) {
             val session = SessionManager(context)
             Triple(
                 session.getUserName() ?: "Student",
                 repo.generateQrToken(),
-                hasLocationPermission(context)
+                hasLocationPermission(context) && hasBackgroundLocationPermission(context)
             )
         }
         studentName = name
         qrBitmap = generateQrBitmap(token)
-        geofenceEnabled = hasLocationPermission
-        if (hasLocationPermission) {
+        geofenceEnabled = permissionsReady
+        if (permissionsReady) {
             geofenceManager.startGeofencing()
         } else {
             locationPermissionLauncher.launch(
@@ -121,6 +141,11 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -335,7 +360,7 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
                 )
             ) {
                 Icon(
-                    if (hasPendingReq) Icons.Filled.PendingActions else Icons.Filled.DirectionsWalk,
+                    if (hasPendingReq) Icons.Filled.PendingActions else Icons.AutoMirrored.Filled.DirectionsWalk,
                     null, modifier = Modifier.size(18.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -370,7 +395,7 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
                 onDismissRequest = { if (!isSubmitting) showExitDialog = false },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Filled.DirectionsWalk, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.AutoMirrored.Filled.DirectionsWalk, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Text("Request Exit Pass")
                     }
                 },
@@ -605,6 +630,11 @@ private fun StudentStatusBanner(latestRequest: ExitRequestDto?, geofenceEnabled:
 private fun hasLocationPermission(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun hasBackgroundLocationPermission(context: Context): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
 
 @Composable

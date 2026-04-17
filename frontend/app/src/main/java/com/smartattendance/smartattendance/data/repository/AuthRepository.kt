@@ -1,22 +1,32 @@
 package com.smartattendance.smartattendance.data.repository
 
 import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.smartattendance.smartattendance.data.local.DeviceIdentity
 import com.smartattendance.smartattendance.data.local.SessionManager
 import com.smartattendance.smartattendance.data.model.User
 import com.smartattendance.smartattendance.data.remote.ApiClient
 import com.smartattendance.smartattendance.data.remote.LoginRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 
 class AuthRepository(private val context: Context) {
 
     private val api = ApiClient.api
+    private val deviceId by lazy { DeviceIdentity.getDeviceId(context) }
+    private val clientType = "android-app"
 
     suspend fun login(email: String, password: String): Result<User> {
         return withContext(Dispatchers.IO) {
             try {
                 // Network call
-                val response = api.login(LoginRequest(email.trim(), password))
+                val response = api.login(
+                    clientType = clientType,
+                    deviceId = deviceId,
+                    request = LoginRequest(email.trim(), password)
+                )
 
                 // EncryptedSharedPreferences write (crypto — keep on IO thread)
                 val session = SessionManager(context)
@@ -36,8 +46,10 @@ class AuthRepository(private val context: Context) {
                         role = response.role
                     )
                 )
+            } catch (e: HttpException) {
+                Result.failure(Exception(extractErrorMessage(e)))
             } catch (e: Exception) {
-                Result.failure(e)
+                Result.failure(Exception(e.message ?: "Login failed"))
             }
         }
     }
@@ -68,5 +80,15 @@ class AuthRepository(private val context: Context) {
         SessionManager(context).getUserName()
     } catch (e: Exception) {
         null
+    }
+
+    private fun extractErrorMessage(error: HttpException): String {
+        return try {
+            val body = error.response()?.errorBody()?.string().orEmpty()
+            val detail = Gson().fromJson(body, JsonObject::class.java)?.get("detail")?.asString
+            detail ?: error.message()
+        } catch (e: Exception) {
+            error.message()
+        }
     }
 }

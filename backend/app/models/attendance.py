@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, DateTime, Float, String
 from app.core.database import Base
 from datetime import datetime
 import uuid
@@ -41,4 +41,10 @@ class GeofenceEvent(Base):
     permission_status = Column(String, nullable=False, default="NONE")
     source_type = Column(String, nullable=False)             # "UNAUTHORIZED_EXIT" | "RETURN_TO_CAMPUS"
     note = Column(String, nullable=True)
+    device_id = Column(String, nullable=True)
+    network_type = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    accuracy_meters = Column(Float, nullable=True)
+    distance_from_center_meters = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

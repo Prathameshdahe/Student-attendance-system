@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.access_policy import enforce_admin_access
 from app.core.security import verify_password, create_access_token, decode_token, hash_password
 from app.models.user import User
 
@@ -45,6 +46,7 @@ class UserProfile(BaseModel):
 # ─── Helper: get current user from JWT ─────────────────────────────────────────
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
@@ -55,18 +57,20 @@ def get_current_user(
     user = db.query(User).filter(User.id == payload.get("sub")).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    enforce_admin_access(request, user)
     return user
 
 
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == req.email.lower().strip()).first()
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+    enforce_admin_access(request, user)
 
     token = create_access_token({"sub": user.id, "role": user.role, "email": user.email})
     return LoginResponse(

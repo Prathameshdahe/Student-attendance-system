@@ -1,9 +1,11 @@
 package com.smartattendance.smartattendance.data.remote
 
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 data class LoginRequest(val email: String, val password: String)
@@ -34,7 +36,16 @@ data class ScanResponse(
     val time: String? = null
 )
 
-data class GeofenceRequest(val type: String)
+data class GeofenceRequest(
+    val type: String,
+    val timestamp: Long? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracy_meters: Float? = null,
+    val distance_from_center_meters: Float? = null,
+    val device_id: String? = null,
+    val network_type: String? = null
+)
 
 data class GeofenceResponse(val status: String, val message: String)
 
@@ -43,9 +54,14 @@ data class ExitRequest(val reason: String)
 data class ExitResponse(val status: String, val message: String)
 
 data class GeofenceEventRequest(
-    val transition_type: String,
+    val type: String,
     val timestamp: Long,
-    val date: String
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracy_meters: Float? = null,
+    val distance_from_center_meters: Float? = null,
+    val device_id: String? = null,
+    val network_type: String? = null
 )
 
 data class GeofenceEventResponse(
@@ -106,69 +122,122 @@ data class GeofenceEventDto(
     val note: String? = null,
     val time: String? = null,
     val date: String? = null,
+    val device_id: String? = null,
+    val network_type: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracy_meters: Double? = null,
+    val distance_from_center_meters: Double? = null,
     val created_at: String? = null
 )
 
 interface ApiService {
 
     @POST("auth/login")
-    suspend fun login(@Body request: LoginRequest): LoginResponse
+    suspend fun login(
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
+        @Body request: LoginRequest
+    ): LoginResponse
 
     @GET("auth/me")
-    suspend fun getMe(@Header("Authorization") bearerToken: String): UserProfile
+    suspend fun getMe(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String
+    ): UserProfile
 
     @POST("attendance/scan")
-    suspend fun scanQr(@Header("Authorization") bearerToken: String, @Body request: ScanRequest): ScanResponse
+    suspend fun scanQr(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
+        @Body request: ScanRequest
+    ): ScanResponse
 
     @POST("attendance/geofence-alert")
-    suspend fun sendGeofenceAlert(@Header("Authorization") bearerToken: String, @Body request: GeofenceRequest): GeofenceResponse
+    suspend fun sendGeofenceAlert(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
+        @Body request: GeofenceRequest
+    ): GeofenceResponse
 
     @POST("attendance/geofence-events")
     suspend fun postGeofenceEvent(
         @Header("Authorization") token: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
         @Body body: GeofenceEventRequest
-    ): retrofit2.Response<GeofenceEventResponse>
+    ): Response<GeofenceEventResponse>
 
     @POST("attendance/exit-requests")
-    suspend fun submitExitRequest(@Header("Authorization") bearerToken: String, @Body request: ExitRequest): ExitResponse
+    suspend fun submitExitRequest(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
+        @Body request: ExitRequest
+    ): ExitResponse
 
     @GET("attendance/history/me")
-    suspend fun getMyHistory(@Header("Authorization") bearerToken: String): List<HistoryRecord>
+    suspend fun getMyHistory(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String
+    ): List<HistoryRecord>
 
     @GET("attendance/live/today")
-    suspend fun getLiveAttendanceToday(@Header("Authorization") bearerToken: String): List<LiveAttendanceDto>
+    suspend fun getLiveAttendanceToday(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String
+    ): List<LiveAttendanceDto>
 
     @GET("attendance/exit-requests/pending")
-    suspend fun getPendingExitRequests(@Header("Authorization") bearerToken: String): List<ExitRequestDto>
+    suspend fun getPendingExitRequests(
+        @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String
+    ): List<ExitRequestDto>
 
     @POST("attendance/exit-requests/{id}/resolve")
     suspend fun resolveExitRequest(
         @Header("Authorization") bearerToken: String,
-        @retrofit2.http.Path("id") reqId: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
+        @Path("id") reqId: String,
         @Body action: ResolveActionRequest
     ): ExitResponse
 
     @GET("attendance/exit-requests/me")
     suspend fun getMyExitRequests(
         @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
         @Query("limit") limit: Int = 20
     ): List<ExitRequestDto>
 
     @GET("attendance/exit-requests/history")
     suspend fun getExitRequestHistory(
         @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
         @Query("limit") limit: Int = 20
     ): List<ExitRequestDto>
 
     @GET("attendance/geofence-events")
     suspend fun getGeofenceEvents(
         @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
         @Query("limit") limit: Int = 20
     ): List<GeofenceEventDto>
 
     @GET("attendance/geofence-events/me")
     suspend fun getMyGeofenceEvents(
         @Header("Authorization") bearerToken: String,
+        @Header("X-KIWI-Client-Type") clientType: String,
+        @Header("X-KIWI-Device-ID") deviceId: String,
         @Query("limit") limit: Int = 20
     ): List<GeofenceEventDto>
 }

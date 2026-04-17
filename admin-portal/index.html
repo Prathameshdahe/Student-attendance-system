@@ -335,55 +335,65 @@ const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const API_BASE = "https://fabulous-gratitude-production-5eb1.up.railway.app";
+const WEB_CLIENT_TYPE = "web-portal";
+
+async function readError(r, fallback) {
+  try {
+    const data = await r.json();
+    return data.detail || data.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
   const r = await fetch(`${API_BASE}/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
     body: JSON.stringify({ email, password })
   });
-  if (!r.ok) throw new Error("Invalid credentials");
+  if (!r.ok) throw new Error(await readError(r, "Invalid credentials"));
   return r.json();
 }
 async function apiFetchStudents(token) {
-  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchLiveToday(token) {
-  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchExitRequests(token) {
-  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed");
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchExitHistory(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
   const r = await fetch(`${API_BASE}/attendance/exit-requests/history?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
   });
-  if (!r.ok) throw new Error("Failed");
+  if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiFetchGeofenceEvents(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
   const r = await fetch(`${API_BASE}/attendance/geofence-events?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
   });
-  if (!r.ok) throw new Error("Failed");
+  if (!r.ok) throw new Error(await readError(r, "Failed"));
   return r.json();
 }
 async function apiResolveExitRequest(token, requestId, action) {
   const r = await fetch(`${API_BASE}/attendance/exit-requests/${requestId}/resolve`, {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
     body: JSON.stringify({ action })
   });
-  if (!r.ok) throw new Error("Failed to resolve exit request");
+  if (!r.ok) throw new Error(await readError(r, "Failed to resolve exit request"));
   return await r.json();
 }
 
@@ -393,8 +403,8 @@ async function apiFetchAnalytics(token, fromDate, toDate) {
   if (fromDate) params.push(`from_date=${fromDate}`);
   if (toDate)   params.push(`to_date=${toDate}`);
   if (params.length) url += '?' + params.join('&');
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!r.ok) throw new Error("Failed to fetch analytics");
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
+  if (!r.ok) throw new Error(await readError(r, "Failed to fetch analytics"));
   return await r.json();
 }
 
@@ -611,7 +621,7 @@ function LoginPage({ onLogin }) {
       <div className="login-right">
         <div className="login-card">
           <h2>Admin Login</h2>
-          <p className="sub">Access the live monitoring dashboard</p>
+          <p className="sub">Access the live monitoring dashboard from an approved admin network. Day-to-day admin access is expected from the Android app.</p>
           {error && <div className="err-msg">⚠ {error}</div>}
           <form onSubmit={handleSubmit}>
             <div className="input-wrap">
@@ -652,6 +662,7 @@ function Dashboard({ session, onLogout }) {
   const [toDate,   setToDate  ] = useState('');
   const [expandedStudent, setExpandedStudent] = useState(null);
   const prevExitCount = useRef(0);
+  const prevGeofenceExitId = useRef(null);
   const { toasts, addToast, removeToast } = useToasts();
 
   const loadAnalytics = async () => {
@@ -694,6 +705,11 @@ function Dashboard({ session, onLogout }) {
         if (newReq) addToast("warning", "Exit Request", `${newReq.name} (${newReq.roll}) — ${newReq.reason}`);
       }
       prevExitCount.current = exits.length;
+      const newestExitAlert = alerts.find(item => item.event_type === 'EXIT');
+      if (prevGeofenceExitId.current && newestExitAlert && newestExitAlert.id !== prevGeofenceExitId.current) {
+        addToast("error", "Geofence Exit", `${newestExitAlert.name || "Student"} left the campus boundary.`);
+      }
+      if (newestExitAlert) prevGeofenceExitId.current = newestExitAlert.id;
       setExitRequests(exits);
       setRequestHistory(history);
       setGeofenceEvents(alerts);
@@ -901,6 +917,11 @@ function Dashboard({ session, onLogout }) {
                     <div style={{ flex: 1 }}>
                       <div className="feed-name">{item.name || 'Student'}</div>
                       <div className="roster-meta">{item.note || item.event_type}</div>
+                      {(item.network_type || item.distance_from_center_meters) && (
+                        <div className="roster-meta">
+                          {[item.network_type, item.distance_from_center_meters ? `${Math.round(item.distance_from_center_meters)} m from center` : null].filter(Boolean).join(' • ')}
+                        </div>
+                      )}
                     </div>
                     <span className={`feed-pill ${item.event_type === 'EXIT' ? 'exit' : 'in'}`}>
                       {item.event_type}

@@ -26,6 +26,12 @@ def _table_columns(conn, table_name: str, dialect: str) -> set[str]:
         return {row[0] for row in rows}
 
 
+def _ensure_column(conn, table_name: str, column_name: str, column_type: str, dialect: str) -> None:
+    columns = _table_columns(conn, table_name, dialect)
+    if column_name not in columns:
+        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"))
+
+
 def _deduplicate_attendance_rows(conn) -> None:
     duplicate_groups = conn.execute(
         text(
@@ -101,13 +107,9 @@ def run_startup_migrations() -> None:
             }
 
         if "exit_requests" in tables:
-            exit_columns = _table_columns(conn, "exit_requests", dialect)
-            if "resolved_at" not in exit_columns:
-                conn.execute(text("ALTER TABLE exit_requests ADD COLUMN resolved_at DATETIME"))
-            if "left_campus_at" not in exit_columns:
-                conn.execute(text("ALTER TABLE exit_requests ADD COLUMN left_campus_at DATETIME"))
-            if "returned_campus_at" not in exit_columns:
-                conn.execute(text("ALTER TABLE exit_requests ADD COLUMN returned_campus_at DATETIME"))
+            _ensure_column(conn, "exit_requests", "resolved_at", "DATETIME", dialect)
+            _ensure_column(conn, "exit_requests", "left_campus_at", "DATETIME", dialect)
+            _ensure_column(conn, "exit_requests", "returned_campus_at", "DATETIME", dialect)
             conn.execute(
                 text("UPDATE exit_requests SET status = 'DENIED' WHERE status IN ('DENYD', 'DENY')")
             )
@@ -142,11 +144,25 @@ def run_startup_migrations() -> None:
                     permission_status VARCHAR NOT NULL DEFAULT 'NONE',
                     source_type VARCHAR NOT NULL,
                     note VARCHAR,
+                    device_id VARCHAR,
+                    network_type VARCHAR,
+                    latitude FLOAT,
+                    longitude FLOAT,
+                    accuracy_meters FLOAT,
+                    distance_from_center_meters FLOAT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
         )
+        geofence_columns = _table_columns(conn, "geofence_events", dialect)
+        if geofence_columns:
+            _ensure_column(conn, "geofence_events", "device_id", "VARCHAR", dialect)
+            _ensure_column(conn, "geofence_events", "network_type", "VARCHAR", dialect)
+            _ensure_column(conn, "geofence_events", "latitude", "FLOAT", dialect)
+            _ensure_column(conn, "geofence_events", "longitude", "FLOAT", dialect)
+            _ensure_column(conn, "geofence_events", "accuracy_meters", "FLOAT", dialect)
+            _ensure_column(conn, "geofence_events", "distance_from_center_meters", "FLOAT", dialect)
         conn.execute(
             text(
                 """
