@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: kiwi-smart-attendance-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_ALLOWED_CLIENT_TYPES
+        value: ""
+      - key: ADMIN_ALLOWED_NETWORKS
+        value: ""
+      - key: ADMIN_ALLOWED_DEVICE_IDS
+        value: ""

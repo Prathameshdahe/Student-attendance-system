@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Smart Attendance — BVCOE Admin</title>
 <meta name="description" content="Real-time campus attendance monitoring dashboard for Bharati Vidyapeeth College of Engineering, Pune." />
-<link rel="icon" href="https://img.icons8.com/color/48/000000/kiwi-bird.png" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -335,100 +334,67 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const DEFAULT_API_BASE = "https://fabulous-gratitude-production-9d95.up.railway.app";
-const WEB_CLIENT_TYPE = "web-portal";
-
-function normalizeApiBase(value) {
-  const candidate = (value || DEFAULT_API_BASE).trim();
-  if (candidate.includes("fabulous-gratitude-production-5eb1")) {
-    return DEFAULT_API_BASE;
-  }
-  return candidate.replace(/\/+$/, "");
-}
-
-let apiBase = normalizeApiBase(
-  new URLSearchParams(window.location.search).get("api") ||
-  window.localStorage.getItem("kiwi_api_base") ||
-  DEFAULT_API_BASE
-);
-
-function getApiBase() {
-  return apiBase;
-}
-
-function saveApiBase(value) {
-  apiBase = normalizeApiBase(value);
-  window.localStorage.setItem("kiwi_api_base", apiBase);
-}
-
-async function readError(r, fallback) {
-  try {
-    const data = await r.json();
-    return data.detail || data.message || fallback;
-  } catch {
-    return fallback;
-  }
-}
+const API_BASE = "http://localhost:8081";
 
 // ─── API LAYER ───────────────────────────────────────────────────────────────
 async function apiLogin(email, password) {
-  const r = await fetch(`${getApiBase()}/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json", "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
+  const r = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password })
   });
-  if (!r.ok) throw new Error(await readError(r, "Invalid credentials"));
+  if (!r.ok) throw new Error("Invalid credentials");
   return r.json();
 }
 async function apiFetchStudents(token) {
-  const r = await fetch(`${getApiBase()}/students`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
-  if (!r.ok) throw new Error(await readError(r, "Failed"));
+  const r = await fetch(`${API_BASE}/students`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 async function apiFetchLiveToday(token) {
-  const r = await fetch(`${getApiBase()}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
-  if (!r.ok) throw new Error(await readError(r, "Failed"));
+  const r = await fetch(`${API_BASE}/attendance/live/today`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 async function apiFetchExitRequests(token) {
-  const r = await fetch(`${getApiBase()}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
-  if (!r.ok) throw new Error(await readError(r, "Failed"));
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/pending`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 async function apiFetchExitHistory(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
-  const r = await fetch(`${getApiBase()}/attendance/exit-requests/history?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/history?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
   });
-  if (!r.ok) throw new Error(await readError(r, "Failed"));
+  if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 async function apiFetchGeofenceEvents(token, studentId = null, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (studentId) params.set("student_id", studentId);
-  const r = await fetch(`${getApiBase()}/attendance/geofence-events?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE }
+  const r = await fetch(`${API_BASE}/attendance/geofence-events?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` }
   });
-  if (!r.ok) throw new Error(await readError(r, "Failed"));
+  if (!r.ok) throw new Error("Failed");
   return r.json();
 }
 async function apiResolveExitRequest(token, requestId, action) {
-  const r = await fetch(`${getApiBase()}/attendance/exit-requests/${requestId}/resolve`, {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE },
+  const r = await fetch(`${API_BASE}/attendance/exit-requests/${requestId}/resolve`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ action })
   });
-  if (!r.ok) throw new Error(await readError(r, "Failed to resolve exit request"));
+  if (!r.ok) throw new Error("Failed to resolve exit request");
   return await r.json();
 }
 
 async function apiFetchAnalytics(token, fromDate, toDate) {
-  let url = `${getApiBase()}/attendance/analytics/summary`;
+  let url = `${API_BASE}/attendance/analytics/summary`;
   const params = [];
   if (fromDate) params.push(`from_date=${fromDate}`);
   if (toDate)   params.push(`to_date=${toDate}`);
   if (params.length) url += '?' + params.join('&');
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "X-KIWI-Client-Type": WEB_CLIENT_TYPE } });
-  if (!r.ok) throw new Error(await readError(r, "Failed to fetch analytics"));
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("Failed to fetch analytics");
   return await r.json();
 }
 
@@ -625,16 +591,12 @@ function StudentModal({ s, rec, onClose, exitHistory = [], geofenceHistory = [],
 function LoginPage({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [apiBaseInput, setApiBaseInput] = useState(getApiBase());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault(); setError(""); setLoading(true);
-    try {
-      saveApiBase(apiBaseInput);
-      onLogin(await apiLogin(email, password));
-    }
+    try { onLogin(await apiLogin(email, password)); }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -642,20 +604,16 @@ function LoginPage({ onLogin }) {
   return (
     <div className="login-wrap">
       <div className="login-left">
-        <img src="https://img.icons8.com/color/96/000000/kiwi-bird.png" alt="BVCOE" className="brand-logo-img" />
+        <img src="logo_crest.png" alt="BVCOE" className="brand-logo-img" />
         <h1>Smart Attendance</h1>
         <p>Real-time campus monitoring system for Bharati Vidyapeeth College of Engineering, Pune.</p>
       </div>
       <div className="login-right">
         <div className="login-card">
           <h2>Admin Login</h2>
-          <p className="sub">Access the live monitoring dashboard from an approved admin network. Day-to-day admin access is expected from the Android app.</p>
+          <p className="sub">Access the live monitoring dashboard</p>
           {error && <div className="err-msg">⚠ {error}</div>}
           <form onSubmit={handleSubmit}>
-            <div className="input-wrap">
-              <label>Backend API</label>
-              <input type="text" value={apiBaseInput} onChange={e => setApiBaseInput(e.target.value)} placeholder="https://your-railway-domain.up.railway.app" required />
-            </div>
             <div className="input-wrap">
               <label>Administrator Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@bvucoep.edu.in" required />
@@ -694,7 +652,6 @@ function Dashboard({ session, onLogout }) {
   const [toDate,   setToDate  ] = useState('');
   const [expandedStudent, setExpandedStudent] = useState(null);
   const prevExitCount = useRef(0);
-  const prevGeofenceExitId = useRef(null);
   const { toasts, addToast, removeToast } = useToasts();
 
   const loadAnalytics = async () => {
@@ -737,11 +694,6 @@ function Dashboard({ session, onLogout }) {
         if (newReq) addToast("warning", "Exit Request", `${newReq.name} (${newReq.roll}) — ${newReq.reason}`);
       }
       prevExitCount.current = exits.length;
-      const newestExitAlert = alerts.find(item => item.event_type === 'EXIT');
-      if (prevGeofenceExitId.current && newestExitAlert && newestExitAlert.id !== prevGeofenceExitId.current) {
-        addToast("error", "Geofence Exit", `${newestExitAlert.name || "Student"} left the campus boundary.`);
-      }
-      if (newestExitAlert) prevGeofenceExitId.current = newestExitAlert.id;
       setExitRequests(exits);
       setRequestHistory(history);
       setGeofenceEvents(alerts);
@@ -799,7 +751,7 @@ function Dashboard({ session, onLogout }) {
     <div className="app-shell">
       <div className="topbar">
         <div className="topbar-brand">
-          <img src="../frontend/app/src/main/res/drawable-nodpi/logo_crest.png" alt="Logo" />
+          <img src="logo_crest.png" alt="Logo" />
           <span>Smart Attendance</span>
         </div>
         <div className="topbar-sep" />
@@ -949,11 +901,6 @@ function Dashboard({ session, onLogout }) {
                     <div style={{ flex: 1 }}>
                       <div className="feed-name">{item.name || 'Student'}</div>
                       <div className="roster-meta">{item.note || item.event_type}</div>
-                      {(item.network_type || item.distance_from_center_meters) && (
-                        <div className="roster-meta">
-                          {[item.network_type, item.distance_from_center_meters ? `${Math.round(item.distance_from_center_meters)} m from center` : null].filter(Boolean).join(' • ')}
-                        </div>
-                      )}
                     </div>
                     <span className={`feed-pill ${item.event_type === 'EXIT' ? 'exit' : 'in'}`}>
                       {item.event_type}

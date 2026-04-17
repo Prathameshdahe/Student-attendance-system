@@ -8,13 +8,20 @@ Write-Host "(This fixes browser security restrictions on file:// URLs)" -Foregro
 Write-Host "Configured Railway backend: https://fabulous-gratitude-production-9d95.up.railway.app" -ForegroundColor Cyan
 Write-Host ""
 
-# Kill any existing Python server on port 8080
-$existing = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+# Kill any existing Python servers on port 8080 or 8081
+$existing = Get-NetTCPConnection -LocalPort 8080,8081 -ErrorAction SilentlyContinue
 if ($existing) {
-    $pid = $existing.OwningProcess | Select-Object -First 1
-    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+    foreach ($conn in $existing) {
+        $pid = $conn.OwningProcess
+        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+    }
     Start-Sleep -Seconds 1
 }
+
+# Start the local DNS bypass proxy
+$proxyCmd = "-NoExit -Command `"cd '$PSScriptRoot'; python proxy.py 8081`""
+Start-Process powershell -ArgumentList $proxyCmd -WindowStyle Minimized
+Start-Sleep -Seconds 1
 
 # Start a local HTTP server in the admin-portal directory in the background
 $serverCmd = "-NoExit -Command `"cd '$PSScriptRoot\admin-portal'; python -m http.server 8080`""
