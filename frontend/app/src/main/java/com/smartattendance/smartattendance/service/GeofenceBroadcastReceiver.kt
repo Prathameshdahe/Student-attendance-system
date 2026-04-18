@@ -32,14 +32,19 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         }
 
         val location = event.triggeringLocation
+        val distanceFromCenter = location?.let { distanceFromCampus(it) }
+        if (shouldIgnoreTransition(transitionType, location?.accuracy, distanceFromCenter)) {
+            return
+        }
+
         saveEventToQueue(
             context = context,
             type = transitionType,
-            timestamp = System.currentTimeMillis(),
+            timestamp = location?.time?.takeIf { it > 0L } ?: System.currentTimeMillis(),
             latitude = location?.latitude,
             longitude = location?.longitude,
             accuracyMeters = location?.accuracy,
-            distanceFromCenterMeters = location?.let { distanceFromCampus(it) },
+            distanceFromCenterMeters = distanceFromCenter,
             networkType = currentNetworkType(context),
             deviceId = DeviceIdentity.getDeviceId(context)
         )
@@ -133,6 +138,26 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
         val activeNetwork = cm.activeNetwork ?: return false
         val capabilities = cm.getNetworkCapabilities(activeNetwork) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun shouldIgnoreTransition(
+        transitionType: String,
+        accuracyMeters: Float?,
+        distanceFromCenterMeters: Float?
+    ): Boolean {
+        if (
+            accuracyMeters != null &&
+            accuracyMeters > GeofenceManager.MAX_ACCEPTABLE_ACCURACY_METERS
+        ) {
+            return true
+        }
+
+        val distance = distanceFromCenterMeters ?: return false
+        return when (transitionType) {
+            "EXIT" -> distance <= GeofenceManager.GEOFENCE_RADIUS + GeofenceManager.BOUNDARY_BUFFER_METERS
+            "RETURN" -> distance >= GeofenceManager.GEOFENCE_RADIUS - GeofenceManager.BOUNDARY_BUFFER_METERS
+            else -> false
+        }
     }
 
     private fun distanceFromCampus(location: Location): Float {

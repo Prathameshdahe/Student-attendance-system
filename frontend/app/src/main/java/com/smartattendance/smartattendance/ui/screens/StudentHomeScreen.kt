@@ -217,7 +217,7 @@ fun StudentHomeScreen(onLogout: () -> Unit, onViewHistory: () -> Unit = {}) {
             ) {
                 KiwiStatCard("Request", latestRequest?.status.orEmpty().ifBlank { "Clear" }, Modifier.weight(1f))
                 KiwiStatCard("Today", SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date()), Modifier.weight(1f))
-                KiwiStatCard("Alerts", recentGeofenceEvents.count { it.event_type == "EXIT" }.toString(), Modifier.weight(1f))
+                KiwiStatCard("Alerts", recentGeofenceEvents.count { it.should_alert }.toString(), Modifier.weight(1f))
             }
 
             Spacer(Modifier.height(20.dp))

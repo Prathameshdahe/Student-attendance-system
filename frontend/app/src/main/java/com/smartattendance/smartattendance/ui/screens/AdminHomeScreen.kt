@@ -76,15 +76,15 @@ fun AdminHomeScreen(
         pendingRequests = repo.getPendingExitRequests().getOrNull().orEmpty()
         requestHistory = repo.getExitRequestHistory().getOrNull().orEmpty()
         val latestGeofenceEvents = repo.getGeofenceEvents().getOrNull().orEmpty()
-        val newestExit = latestGeofenceEvents.firstOrNull { it.event_type == "EXIT" }
-        if (lastSeenGeofenceId != null && newestExit != null && newestExit.id != lastSeenGeofenceId) {
+        val newestAlert = latestGeofenceEvents.firstOrNull { it.should_alert }
+        if (lastSeenGeofenceId != null && newestAlert != null && newestAlert.id != lastSeenGeofenceId) {
             Toast.makeText(
                 context,
-                "Campus exit alert: ${newestExit.name ?: "Student"} left the geofence",
+                newestAlert.note ?: "Campus exit alert",
                 Toast.LENGTH_LONG
             ).show()
         }
-        lastSeenGeofenceId = newestExit?.id ?: lastSeenGeofenceId
+        lastSeenGeofenceId = newestAlert?.id ?: lastSeenGeofenceId
         geofenceEvents = latestGeofenceEvents
         activityLog = live.map { record ->
             ActivityLogItem(
@@ -214,7 +214,7 @@ fun AdminHomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 KiwiStatCard("Present", "${activityLog.count { it.action == "On Campus" }}", Modifier.weight(1f))
-                KiwiStatCard("Alerts", "${geofenceEvents.count { it.event_type == "EXIT" }}", Modifier.weight(1f))
+                KiwiStatCard("Alerts", "${geofenceEvents.count { it.should_alert }}", Modifier.weight(1f))
                 KiwiStatCard("Scanned", "${activityLog.size}", Modifier.weight(1f))
             }
 
@@ -301,7 +301,7 @@ fun AdminHomeScreen(
                 if (geofenceEvents.isNotEmpty()) {
                     item {
                         Spacer(Modifier.height(8.dp))
-                        Text("Recent Geofence Alerts", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+                        Text("Recent Geofence Activity", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
                     }
                     items(geofenceEvents.take(5)) { event ->
                         GeofenceAlertCard(event = event)
@@ -457,6 +457,26 @@ fun ExitRequestCard(
 
 @Composable
 fun GeofenceAlertCard(event: GeofenceEventDto) {
+    val accent = when {
+        event.should_alert && event.alert_level == "critical" -> Color(0xFFEF4444)
+        event.should_alert -> Color(0xFFF59E0B)
+        event.event_type == "RETURN" -> Color(0xFF6366F1)
+        else -> Color(0xFF10B981)
+    }
+    val chipColor = when {
+        event.should_alert && event.alert_level == "critical" -> Color(0xFFFEE2E2)
+        event.should_alert -> Color(0xFFFEF3C7)
+        event.event_type == "RETURN" -> Color(0xFFE0E7FF)
+        else -> Color(0xFFD1FAE5)
+    }
+    val eventLabel = when {
+        event.should_alert && event.alert_level == "critical" -> "Denied Exit"
+        event.should_alert -> "Unauthorized Exit"
+        event.event_type == "RETURN" -> "Returned"
+        event.permission_status == "APPROVED" -> "Approved Exit"
+        event.permission_status == "PENDING" -> "Pending Request"
+        else -> event.event_type
+    }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -467,12 +487,12 @@ fun GeofenceAlertCard(event: GeofenceEventDto) {
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(shape = CircleShape, color = if (event.event_type == "EXIT") Color(0xFFFEF3C7) else Color(0xFFE0E7FF), modifier = Modifier.size(40.dp)) {
+            Surface(shape = CircleShape, color = chipColor, modifier = Modifier.size(40.dp)) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         if (event.event_type == "EXIT") Icons.AutoMirrored.Filled.DirectionsWalk else Icons.Filled.LocationOn,
                         null,
-                        tint = if (event.event_type == "EXIT") Color(0xFFF59E0B) else Color(0xFF6366F1),
+                        tint = accent,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -482,6 +502,8 @@ fun GeofenceAlertCard(event: GeofenceEventDto) {
                 Text(event.name ?: "Student", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
                 Text(event.note ?: event.event_type, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
                 val metaParts = buildList {
+                    event.date?.takeIf { it.isNotBlank() }?.let { add(it) }
+                    event.time?.takeIf { it.isNotBlank() }?.let { add(it) }
                     event.network_type?.takeIf { it.isNotBlank() }?.let { add(it) }
                     event.distance_from_center_meters?.let { add("${it.toInt()} m from center") }
                 }
@@ -492,7 +514,7 @@ fun GeofenceAlertCard(event: GeofenceEventDto) {
                     )
                 }
             }
-            Text(event.time ?: "--", style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant))
+            Text(eventLabel, style = MaterialTheme.typography.labelSmall.copy(color = accent, fontWeight = FontWeight.Bold))
         }
     }
 }

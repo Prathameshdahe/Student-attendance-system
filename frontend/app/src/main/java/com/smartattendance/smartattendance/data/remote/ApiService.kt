@@ -128,7 +128,9 @@ data class GeofenceEventDto(
     val longitude: Double? = null,
     val accuracy_meters: Double? = null,
     val distance_from_center_meters: Double? = null,
-    val created_at: String? = null
+    val created_at: String? = null,
+    val should_alert: Boolean = false,
+    val alert_level: String? = null
 )
 
 interface ApiService {

@@ -19,6 +19,9 @@ class GeofenceManager(private val context: Context) {
         const val COLLEGE_LAT = 18.458444
         const val COLLEGE_LNG = 73.855922
         const val GEOFENCE_RADIUS = 325f
+        const val BOUNDARY_BUFFER_METERS = 30f
+        const val MAX_ACCEPTABLE_ACCURACY_METERS = 85f
+        const val NOTIFICATION_RESPONSIVENESS_MS = 20_000
     }
 
     private val geofencingClient = LocationServices.getGeofencingClient(context)
@@ -47,7 +50,7 @@ class GeofenceManager(private val context: Context) {
                 Geofence.GEOFENCE_TRANSITION_EXIT or
                     Geofence.GEOFENCE_TRANSITION_ENTER
             )
-            .setNotificationResponsiveness(60_000)
+            .setNotificationResponsiveness(NOTIFICATION_RESPONSIVENESS_MS)
             .build()
 
         val request = GeofencingRequest.Builder()
@@ -55,12 +58,16 @@ class GeofenceManager(private val context: Context) {
             .addGeofence(geofence)
             .build()
 
-        geofencingClient.addGeofences(request, getGeofencePendingIntent())
-            .addOnSuccessListener {
-                Log.d("Geofence", "BVCOE campus geofence registered successfully.")
-            }
-            .addOnFailureListener { e ->
-                Log.e("Geofence", "Geofence registration failed: ${e.message}")
+        val pendingIntent = getGeofencePendingIntent()
+        geofencingClient.removeGeofences(pendingIntent)
+            .addOnCompleteListener {
+                geofencingClient.addGeofences(request, pendingIntent)
+                    .addOnSuccessListener {
+                        Log.d("Geofence", "BVCOE campus geofence registered successfully.")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("Geofence", "Geofence registration failed: ${e.message}")
+                    }
             }
     }
 
