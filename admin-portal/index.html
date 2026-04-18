@@ -739,6 +739,7 @@ function Dashboard({ session, onLogout }) {
   const [toDate,   setToDate  ] = useState('');
   const [expandedStudent, setExpandedStudent] = useState(null);
   const prevExitCount = useRef(0);
+  const prevGeofenceAlertId = useRef(null);
   const { toasts, addToast, removeToast } = useToasts();
 
   const loadAnalytics = async () => {
@@ -780,6 +781,15 @@ function Dashboard({ session, onLogout }) {
         const newReq = exits[0];
         if (newReq) addToast("warning", "Exit Request", `${newReq.name} (${newReq.roll}) — ${newReq.reason}`);
       }
+      const newestAlert = alerts.find(item => item.should_alert);
+      if (prevGeofenceAlertId.current && newestAlert && newestAlert.id !== prevGeofenceAlertId.current) {
+        addToast(
+          newestAlert.alert_level === 'critical' ? 'error' : 'warning',
+          'Geofence Alert',
+          newestAlert.note || `${newestAlert.name || 'Student'} left the campus boundary.`
+        );
+      }
+      prevGeofenceAlertId.current = newestAlert?.id || prevGeofenceAlertId.current;
       prevExitCount.current = exits.length;
       setExitRequests(exits);
       setRequestHistory(history);
@@ -975,8 +985,8 @@ function Dashboard({ session, onLogout }) {
 
           <div className="panel">
             <div className="panel-header">
-              <div className="panel-title">Geofence Alerts</div>
-              <div className="panel-meta">{geofenceEvents.length} recent</div>
+              <div className="panel-title">Geofence Activity</div>
+              <div className="panel-meta">{geofenceEvents.filter(item => item.should_alert).length} active alerts</div>
             </div>
             <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               {geofenceEvents.length === 0 ? (
@@ -988,9 +998,12 @@ function Dashboard({ session, onLogout }) {
                     <div style={{ flex: 1 }}>
                       <div className="feed-name">{item.name || 'Student'}</div>
                       <div className="roster-meta">{item.note || item.event_type}</div>
+                      <div className="roster-meta">
+                        {[item.date, item.network_type, item.distance_from_center_meters ? `${Math.round(item.distance_from_center_meters)} m from center` : null].filter(Boolean).join(' | ')}
+                      </div>
                     </div>
-                    <span className={`feed-pill ${item.event_type === 'EXIT' ? 'exit' : 'in'}`}>
-                      {item.event_type}
+                    <span className={`feed-pill ${item.should_alert ? 'exit' : item.event_type === 'RETURN' ? 'in' : 'out'}`}>
+                      {item.should_alert ? (item.alert_level === 'critical' ? 'Denied Exit' : 'Unauthorized Exit') : item.event_type === 'RETURN' ? 'Returned' : item.permission_status === 'APPROVED' ? 'Approved Exit' : 'Request Pending'}
                     </span>
                   </div>
                 ))
