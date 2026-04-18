@@ -1,4 +1,5 @@
-from datetime import date as dt_date, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -13,9 +14,53 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
+UTC = timezone.utc
+CAMPUS_TIMEZONE = ZoneInfo("Asia/Kolkata")
+ALERT_PERMISSION_STATUSES = {"NONE", "DENIED"}
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def campus_now() -> datetime:
+    return datetime.now(CAMPUS_TIMEZONE)
+
+
+def campus_today() -> str:
+    return campus_now().strftime("%Y-%m-%d")
+
+
+def as_local_time(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(CAMPUS_TIMEZONE)
+
+
+def local_day_bounds(day: str) -> tuple[datetime, datetime]:
+    start_local = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=CAMPUS_TIMEZONE)
+    end_local = start_local + timedelta(days=1)
+    return (
+        start_local.astimezone(UTC).replace(tzinfo=None),
+        end_local.astimezone(UTC).replace(tzinfo=None),
+    )
+
 
 def format_dt(value: datetime | None) -> str | None:
-    return value.strftime("%I:%M %p") if value else None
+    local_value = as_local_time(value)
+    return local_value.strftime("%I:%M %p") if local_value else None
+
+
+def format_date(value: datetime | None) -> str | None:
+    local_value = as_local_time(value)
+    return local_value.strftime("%Y-%m-%d") if local_value else None
+
+
+def format_timestamp(value: datetime | None) -> str | None:
+    local_value = as_local_time(value)
+    return local_value.isoformat() if local_value else None
 
 
 def normalize_exit_status(status: str | None) -> str:
@@ -35,15 +80,29 @@ def status_label(status: str) -> str:
 def geofence_note(event_type: str, permission_status: str, reason: str | None = None) -> str:
     if event_type == "EXIT":
         if permission_status == "APPROVED":
-            return f"Left campus after approval{f' for {reason}' if reason else ''}"
+            return f"Approved exit recorded{f' for {reason}' if reason else ''}"
         if permission_status == "PENDING":
-            return f"Left campus while request was pending{f' for {reason}' if reason else ''}"
+            return f"Exit request pending - alert suppressed{f' for {reason}' if reason else ''}"
         if permission_status == "DENIED":
-            return f"Left campus after request was denied{f' for {reason}' if reason else ''}"
-        return "Left campus without an approved exit request"
+            return f"Alert: Student left campus after request was denied{f' for {reason}' if reason else ''}"
+        return "Alert: Student left campus without an approved exit request"
     if permission_status == "APPROVED":
         return "Returned to campus after an approved exit"
+    if permission_status == "PENDING":
+        return "Returned to campus while request was still pending"
+    if permission_status == "DENIED":
+        return "Returned to campus after an unauthorized exit"
     return "Returned to campus"
+
+
+def should_alert_geofence_event(event_type: str, permission_status: str) -> bool:
+    return event_type == "EXIT" and permission_status in ALERT_PERMISSION_STATUSES
+
+
+def geofence_alert_level(event_type: str, permission_status: str) -> str:
+    if should_alert_geofence_event(event_type, permission_status):
+        return "critical" if permission_status == "DENIED" else "warning"
+    return "info"
 
 
 def serialize_attendance(record: AttendanceRecord, student: User | None = None) -> dict:
@@ -54,7 +113,7 @@ def serialize_attendance(record: AttendanceRecord, student: User | None = None) 
         "status": record.status,
         "time_in": record.time_in,
         "time_out": record.time_out,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "created_at": format_timestamp(record.created_at),
     }
     if student is not None:
         payload.update(
@@ -83,16 +142,16 @@ def serialize_exit_request(
         "reason": request.reason,
         "status": normalized_status,
         "status_label": status_label(normalized_status),
-        "date": request.date,
+        "date": format_date(request.created_at) or request.date,
         "time": format_dt(request.created_at),
-        "created_at": request.created_at.isoformat() if request.created_at else None,
-        "resolved_at": request.resolved_at.isoformat() if request.resolved_at else None,
+        "created_at": format_timestamp(request.created_at),
+        "resolved_at": format_timestamp(request.resolved_at),
         "resolution_time": format_dt(request.resolved_at),
         "resolved_by": request.resolved_by,
         "resolved_by_name": resolver.name if resolver else None,
-        "left_campus_at": request.left_campus_at.isoformat() if request.left_campus_at else None,
+        "left_campus_at": format_timestamp(request.left_campus_at),
         "left_campus_time": format_dt(request.left_campus_at),
-        "returned_campus_at": request.returned_campus_at.isoformat() if request.returned_campus_at else None,
+        "returned_campus_at": format_timestamp(request.returned_campus_at),
         "returned_campus_time": format_dt(request.returned_campus_at),
     }
 
@@ -108,6 +167,7 @@ def serialize_geofence_event(
         permission_status,
         related_request.reason if related_request else None,
     )
+    should_alert = should_alert_geofence_event(event.event_type, permission_status)
     return {
         "id": event.id,
         "student_id": event.student_id,
@@ -120,14 +180,16 @@ def serialize_geofence_event(
         "reason": related_request.reason if related_request else None,
         "note": note,
         "time": format_dt(event.created_at),
-        "date": event.created_at.strftime("%Y-%m-%d") if event.created_at else None,
+        "date": format_date(event.created_at),
         "device_id": event.device_id,
         "network_type": event.network_type,
         "latitude": event.latitude,
         "longitude": event.longitude,
         "accuracy_meters": event.accuracy_meters,
         "distance_from_center_meters": event.distance_from_center_meters,
-        "created_at": event.created_at.isoformat() if event.created_at else None,
+        "created_at": format_timestamp(event.created_at),
+        "should_alert": should_alert,
+        "alert_level": geofence_alert_level(event.event_type, permission_status),
     }
 
 
@@ -160,7 +222,7 @@ def get_live_attendance_today(
     if current_user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    today = str(dt_date.today())
+    today = campus_today()
     records = (
         db.query(AttendanceRecord, User)
         .join(User, AttendanceRecord.student_id == User.id)
@@ -191,7 +253,7 @@ def scan_qr(
     except ValueError:
         return {"status": "INVALID", "message": "Malformed QR code"}
 
-    today = str(dt_date.today())
+    today = campus_today()
     if qr_date != today:
         return {"status": "INVALID", "message": f"QR expired - generated for {qr_date}"}
 
@@ -210,7 +272,7 @@ def scan_qr(
         .first()
     )
 
-    now_str = datetime.now().strftime("%I:%M %p")
+    now_str = campus_now().strftime("%I:%M %p")
 
     if not existing:
         record = AttendanceRecord(
@@ -299,8 +361,8 @@ def normalize_geofence_transition(raw_type: str | None) -> tuple[str, str]:
 
 def geofence_event_time(timestamp_ms: int | None) -> datetime:
     if not timestamp_ms:
-        return datetime.utcnow()
-    return datetime.utcfromtimestamp(timestamp_ms / 1000)
+        return utc_now()
+    return datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC).replace(tzinfo=None)
 
 
 def persist_geofence_event(
@@ -317,6 +379,7 @@ def persist_geofence_event(
     distance_from_center_meters: float | None,
 ) -> dict[str, Any]:
     event_type, source_type = normalize_geofence_transition(transition_type)
+    event_local_day = format_date(event_time) or campus_today()
     recent_duplicate = (
         db.query(GeofenceEvent)
         .filter(
@@ -331,9 +394,14 @@ def persist_geofence_event(
     if recent_duplicate:
         return {"status": "IGNORED", "message": "Duplicate geofence event ignored"}
 
+    day_start_utc, day_end_utc = local_day_bounds(event_local_day)
     latest_request = (
         db.query(ExitRequest)
-        .filter(ExitRequest.student_id == current_user.id)
+        .filter(
+            ExitRequest.student_id == current_user.id,
+            ExitRequest.created_at >= day_start_utc,
+            ExitRequest.created_at < day_end_utc,
+        )
         .order_by(ExitRequest.created_at.desc())
         .first()
     )
@@ -447,7 +515,12 @@ def submit_exit_request(
     if existing:
         return {"status": "ERROR", "message": "You already have a pending exit request"}
 
-    new_request = ExitRequest(student_id=current_user.id, reason=reason)
+    new_request = ExitRequest(
+        student_id=current_user.id,
+        reason=reason,
+        date=campus_today(),
+        created_at=utc_now(),
+    )
     db.add(new_request)
     db.commit()
     db.refresh(new_request)
@@ -558,7 +631,7 @@ def resolve_request(
 
     exit_request.status = action_map[action]
     exit_request.resolved_by = current_user.id
-    exit_request.resolved_at = datetime.utcnow()
+    exit_request.resolved_at = utc_now()
     db.commit()
     db.refresh(exit_request)
 
@@ -665,12 +738,14 @@ def get_analytics_summary(
 
         if from_date:
             attendance_query = attendance_query.filter(AttendanceRecord.date >= from_date)
-            request_query = request_query.filter(ExitRequest.date >= from_date)
-            geofence_query = geofence_query.filter(GeofenceEvent.created_at >= datetime.fromisoformat(f"{from_date}T00:00:00"))
+            from_start_utc, _ = local_day_bounds(from_date)
+            request_query = request_query.filter(ExitRequest.created_at >= from_start_utc)
+            geofence_query = geofence_query.filter(GeofenceEvent.created_at >= from_start_utc)
         if to_date:
             attendance_query = attendance_query.filter(AttendanceRecord.date <= to_date)
-            request_query = request_query.filter(ExitRequest.date <= to_date)
-            geofence_query = geofence_query.filter(GeofenceEvent.created_at < datetime.fromisoformat(f"{to_date}T23:59:59"))
+            _, to_end_utc = local_day_bounds(to_date)
+            request_query = request_query.filter(ExitRequest.created_at < to_end_utc)
+            geofence_query = geofence_query.filter(GeofenceEvent.created_at < to_end_utc)
 
         records = attendance_query.order_by(AttendanceRecord.date.desc()).all()
         requests = request_query.all()
